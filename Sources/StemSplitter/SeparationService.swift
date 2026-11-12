@@ -101,7 +101,7 @@ final class SeparationService {
         launchPath: String,
         arguments: [String],
         progress: @escaping (String) -> Void,
-        failure: (Int32) -> Error
+        failure: @escaping (Int32) -> Error
     ) async throws {
         let process = Process()
         process.launchPath = launchPath
