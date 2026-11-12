@@ -37,16 +37,18 @@ struct MixMathTests {
         #expect(acc == input)
 
         var clipped: [Float] = [3.0, -5.0, 0.5]
+        let clippedCount = clipped.count
         clipped.withUnsafeMutableBufferPointer { ptr in
-            MixMath.clampChannel(ptr.baseAddress!, count: clipped.count)
+            MixMath.clampChannel(ptr.baseAddress!, count: clippedCount)
         }
         #expect(clipped == [1.0, -1.0, 0.5])
     }
 
     @Test func zeroFillsBuffer() {
         var buffer = [Float](repeating: 9, count: 4)
+        let bufferCount = buffer.count
         buffer.withUnsafeMutableBufferPointer { ptr in
-            MixMath.zero(ptr.baseAddress!, count: buffer.count)
+            MixMath.zero(ptr.baseAddress!, count: bufferCount)
         }
         #expect(buffer == [0, 0, 0, 0])
     }
