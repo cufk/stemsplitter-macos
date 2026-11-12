@@ -40,19 +40,33 @@ swift test
 
 ### Felsökning: `unable to resolve module dependency: 'XCTest'`
 
-1. Rensa gamla byggartefakter och försök igen:
+Felet betyder att kompilatorn inte hittar ramverket XCTest. Nästan alltid beror det på att Command Line Tools (CLT) är aktivt utvecklarverktyg i stället för hela Xcode, eller på en korrupt modul-cache.
+
+1. Diagnostisera först:
    ```sh
+   xcode-select -p        # bör visa /Applications/Xcode.app/Contents/Developer
+   ls /Applications       # finns Xcode.app där?
+   ls /Library/Developer/CommandLineTools/Developer/Library/Frameworks/ | grep -i xctest
+   swift --version
+   ```
+2. Rensa cache och bygg om:
+   ```sh
+   cd ~/stemsplitter-macos
    rm -rf .build
+   rm -rf ~/Library/Developer/Xcode/DerivedData   # bara om du byggt från Xcode tidigare
    swift test
    ```
-2. Fungerar det fortfarande inte: installera hela **Xcode** från App Store, välj det som aktiv utvecklarverktyg och acceptera licensen:
+3. Om Xcode finns i /Applications men CLT är aktivt — byt verktyg:
    ```sh
    sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
    sudo xcodebuild -license accept
    swift test
    ```
-
-Obs: själva appen (`swift run`) behöver inte XCTest och fungerar med enbart Command Line Tools.
+   I Xcode själv: stäng paketfönstret, öppna det igen och kör Product → Test (Cmd+U).
+4. Om Xcode inte finns installerat: installera det från App Store (stor nedladdning) och gör sedan steg 3. Vill du bara köra appen går det utan XCTest:
+   ```sh
+   swift run
+   ```
 
 ## Arkitektur
 
