@@ -83,7 +83,7 @@ final class PlaybackEngine: ObservableObject {
             let aheadSeconds: TimeInterval = 0.5
             let sampleRate = renderTime.sampleRate
             let when = AVAudioTime(
-                hostTime: renderTime.hostTime + AVAudioTime.secondsToHostTime(aheadSeconds),
+                hostTime: renderTime.hostTime + Self.secondsToHostTime(aheadSeconds),
                 sampleTime: renderTime.sampleTime + AVAudioFramePosition(aheadSeconds * sampleRate),
                 atRate: sampleRate
             )
@@ -94,7 +94,7 @@ final class PlaybackEngine: ObservableObject {
                 let maxFrame: AVAudioFramePosition = file.length > 0 ? file.length - 1 : 0
                 let startFrame = min(AVAudioFramePosition(offset * fileRate), maxFrame)
                 file.framePosition = startFrame
-                player.scheduleFile(file, at: when) { [weak self] _ in
+                player.scheduleFile(file, at: when) { [weak self] in
                     self?.handleCompletion()
                 }
                 player.play()
@@ -147,6 +147,18 @@ final class PlaybackEngine: ObservableObject {
         }
     }
 
+    private static func secondsToHostTime(_ seconds: TimeInterval) -> UInt64 {
+        var info = mach_timebase_info_data_t()
+        mach_timebase_info(&info)
+        return UInt64(seconds * 1e9 * Double(info.denom) / Double(info.numer))
+    }
+
+    private static func hostTimeToSeconds(_ hostTime: UInt64) -> TimeInterval {
+        var info = mach_timebase_info_data_t()
+        mach_timebase_info(&info)
+        return Double(hostTime) * Double(info.numer) / Double(info.denom) / 1e9
+    }
+
     private func waitForRenderTime() async throws -> AVAudioTime {
         let deadline = Date().addingTimeInterval(2)
         while Date() < deadline {
@@ -188,7 +200,7 @@ final class PlaybackEngine: ObservableObject {
     private func updatePosition() {
         guard isPlaying, startHostTime != 0 else { return }
         let now = mach_absolute_time()
-        let elapsed = AVAudioTime.hostTimeToSeconds(now) - AVAudioTime.hostTimeToSeconds(startHostTime)
+        let elapsed = Self.hostTimeToSeconds(now) - Self.hostTimeToSeconds(startHostTime)
         position = min(startOffset + elapsed, duration)
     }
 }
