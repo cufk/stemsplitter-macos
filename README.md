@@ -19,7 +19,7 @@ All bearbetning sker **100 % lokalt på din Mac**. Ingen ljudfil skickas någons
 
 - macOS 13 (Ventura) eller senare
 - Python 3.9+ (installera "Command Line Tools for Xcode" eller python.org-paketet om `python3` saknas)
-- För `swift test`: **hela Xcode krävs** (testerna använder swift-testing; Command Line Tools saknar både XCTest och makro-pluginet `TestingMacros`, så tester kan inte byggas med enbart CLT). Själva appen (`swift run`) bygger och körs med enbart Command Line Tools.
+- **Hela Xcode krävs** (från App Store) — Command Line Tools saknar makro-plugins (`SwiftUIMacros`, `TestingMacros`) och XCTest, så varken appen (SwiftUI) eller testerna kan byggas med enbart CLT.
 - Internet första gången appen körs: då skapas en virtuell Python-miljö och PyTorch (CPU) + Demucs-modellen laddas ner (någon GB). Därefter fungerar allt offline.
 
 ## Bygga och köra
@@ -60,7 +60,7 @@ Båda betyder samma sak: **tester kräver hela Xcode**, CLT räcker inte. Så h�
    swift test
    ```
 
-Vill du bara köra appen: `swift run` bygger inte testmålet och fungerar med enbart CLT.
+Efter Xcode-installationen: `swift run` startar appen, `swift test` kör testerna.
 
 ## Arkitektur
 

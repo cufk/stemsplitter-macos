@@ -18,7 +18,7 @@ enum MixerExporter {
         let outputFile = try AVAudioFile(
             forWriting: outputURL,
             settings: commonFormat.settings,
-            commonFormat: commonFormat,
+            commonFormat: commonFormat.commonFormat,
             interleaved: false
         )
 
@@ -52,7 +52,7 @@ enum MixerExporter {
         var written: AVAudioFramePosition = 0
 
         while written < totalFrames {
-            let wanted = min(chunkFrames, totalFrames - written)
+            let wanted: AVAudioFrameCount = min(chunkFrames, totalFrames - written)
             mixBuffer.frameLength = wanted
             if let channelData = mixBuffer.floatChannelData {
                 for channel in 0..<Int(channels) {
@@ -63,7 +63,7 @@ enum MixerExporter {
             for reader in readers {
                 let read = try reader.file.read(into: reader.inputBuffer, frameCount: wanted)
                 guard read > 0 else { continue }
-                _ = reader.converter.convert(to: convertedBuffer, from: reader.inputBuffer)
+                reader.converter.convert(to: convertedBuffer, from: reader.inputBuffer)
                 let frames = min(convertedBuffer.frameLength, wanted)
                 guard frames > 0, let converted = convertedBuffer.floatChannelData else { continue }
                 if let mix = mixBuffer.floatChannelData {
