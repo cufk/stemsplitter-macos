@@ -19,6 +19,7 @@ All bearbetning sker **100 % lokalt på din Mac**. Ingen ljudfil skickas någons
 
 - macOS 13 (Ventura) eller senare
 - Python 3.9+ (installera "Command Line Tools for Xcode" eller python.org-paketet om `python3` saknas)
+- För `swift test`: XCTest måste kunna resolvas — det ingår i Command Line Tools för Xcode 16 och senare. Med äldre CLT behöver du installera hela Xcode från App Store.
 - Internet första gången appen körs: då skapas en virtuell Python-miljö och PyTorch (CPU) + Demucs-modellen laddas ner (någon GB). Därefter fungerar allt offline.
 
 ## Bygga och köra
@@ -36,6 +37,22 @@ Testa kärnlogiken:
 ```sh
 swift test
 ```
+
+### Felsökning: `unable to resolve module dependency: 'XCTest'`
+
+1. Rensa gamla byggartefakter och försök igen:
+   ```sh
+   rm -rf .build
+   swift test
+   ```
+2. Fungerar det fortfarande inte: installera hela **Xcode** från App Store, välj det som aktiv utvecklarverktyg och acceptera licensen:
+   ```sh
+   sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+   sudo xcodebuild -license accept
+   swift test
+   ```
+
+Obs: själva appen (`swift run`) behöver inte XCTest och fungerar med enbart Command Line Tools.
 
 ## Arkitektur
 
