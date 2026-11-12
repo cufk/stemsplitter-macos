@@ -62,6 +62,11 @@ Båda betyder samma sak: **tester kräver hela Xcode**, CLT räcker inte. Så h�
 
 Efter Xcode-installationen: `swift run` startar appen, `swift test` kör testerna.
 
+## CI och dev-agent
+
+- `.github/workflows/ci.yml` kör `swift build` + `swift test` på en `macos-14`-runner vid push/PR.
+- `dev-agent/` innehåller ett Mistral Workflow (`dev-agent`) som bevakar CI för branchen, hämtar fel-loggar vid röda körningar, låter en LLM föreslå en fix (unified diff), pushar den med `[dev-agent]`-markör och loopar tills CI är grön. Se `dev-agent/README.md` för driftsättning (kräver workspace-secret `github_token`).
+
 ## Arkitektur
 
 ```
