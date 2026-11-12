@@ -4,7 +4,7 @@ import StemSplitterCore
 enum MixerExporter {
     private static let sampleRate: Double = 44100
     private static let channels: AVAudioChannelCount = 2
-    private static let chunkFrames: AVAudioFrameCount = 44100
+    private static let chunkFrames: AVAudioFramePosition = 44100
 
     static func exportMix(stems: [StemTrack], to outputURL: URL, progress: @escaping (Double) -> Void) async throws {
         guard !stems.isEmpty else { return }
@@ -36,7 +36,7 @@ enum MixerExporter {
             guard let converter = AVAudioConverter(from: file.processingFormat, to: commonFormat) else {
                 throw ExportError.conversionFailed(stem.kind.rawValue)
             }
-            let inputBuffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: chunkFrames)!
+            let inputBuffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(chunkFrames))!
             let duration = Double(file.length) / file.processingFormat.sampleRate
             totalFrames = max(totalFrames, AVAudioFramePosition(duration * sampleRate))
             readers.append(StemReader(
@@ -47,24 +47,26 @@ enum MixerExporter {
             ))
         }
 
-        let mixBuffer = AVAudioPCMBuffer(pcmFormat: commonFormat, frameCapacity: chunkFrames)!
-        let convertedBuffer = AVAudioPCMBuffer(pcmFormat: commonFormat, frameCapacity: chunkFrames)!
+        let mixBuffer = AVAudioPCMBuffer(pcmFormat: commonFormat, frameCapacity: AVAudioFrameCount(chunkFrames))!
+        let convertedBuffer = AVAudioPCMBuffer(pcmFormat: commonFormat, frameCapacity: AVAudioFrameCount(chunkFrames))!
         var written: AVAudioFramePosition = 0
 
         while written < totalFrames {
-            let wanted: AVAudioFrameCount = min(chunkFrames, totalFrames - written)
-            mixBuffer.frameLength = wanted
+            let wanted = min(chunkFrames, totalFrames - written)
+            let wantedCount = AVAudioFrameCount(wanted)
+            mixBuffer.frameLength = wantedCount
             if let channelData = mixBuffer.floatChannelData {
                 for channel in 0..<Int(channels) {
-                    MixMath.zero(channelData[channel], count: Int(wanted))
+                    MixMath.zero(channelData[channel], count: Int(wantedCount))
                 }
             }
 
             for reader in readers {
-                let read = try reader.file.read(into: reader.inputBuffer, frameCount: wanted)
+                try reader.file.read(into: reader.inputBuffer, frameCount: wantedCount)
+                let read = reader.inputBuffer.frameLength
                 guard read > 0 else { continue }
-                reader.converter.convert(to: convertedBuffer, from: reader.inputBuffer)
-                let frames = min(convertedBuffer.frameLength, wanted)
+                try reader.converter.convert(to: convertedBuffer, from: reader.inputBuffer)
+                let frames = min(convertedBuffer.frameLength, read)
                 guard frames > 0, let converted = convertedBuffer.floatChannelData else { continue }
                 if let mix = mixBuffer.floatChannelData {
                     for channel in 0..<Int(channels) {
@@ -85,7 +87,7 @@ enum MixerExporter {
 
             if let channelData = mixBuffer.floatChannelData {
                 for channel in 0..<Int(channels) {
-                    MixMath.clampChannel(channelData[channel], count: Int(wanted))
+                    MixMath.clampChannel(channelData[channel], count: Int(wantedCount))
                 }
             }
 
