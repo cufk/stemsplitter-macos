@@ -19,7 +19,7 @@ All bearbetning sker **100 % lokalt på din Mac**. Ingen ljudfil skickas någons
 
 - macOS 13 (Ventura) eller senare
 - Python 3.9+ (installera "Command Line Tools for Xcode" eller python.org-paketet om `python3` saknas)
-- Swift 6 eller nyare för `swift test` — testerna använder **swift-testing**, som följer med i själva verktygskedjan (ingen XCTest/Xcode behövs)
+- För `swift test`: **hela Xcode krävs** (testerna använder swift-testing; Command Line Tools saknar både XCTest och makro-pluginet `TestingMacros`, så tester kan inte byggas med enbart CLT). Själva appen (`swift run`) bygger och körs med enbart Command Line Tools.
 - Internet första gången appen körs: då skapas en virtuell Python-miljö och PyTorch (CPU) + Demucs-modellen laddas ner (någon GB). Därefter fungerar allt offline.
 
 ## Bygga och köra
@@ -40,26 +40,27 @@ swift test
 
 ### Felsökning vid `swift test`
 
-Testerna använder **swift-testing** (ingår i Swift 6-verktygskedjan), så XCTest eller hela Xcode behövs normalt inte.
+Testerna använder **swift-testing**. Två typiska fel med enbart Command Line Tools (CLT):
 
-1. Kontrollera verktygskedjan:
+- `unable to resolve module dependency: 'XCTest'` — CLT:s SDK saknar XCTest
+- `plugin for module 'TestingMacros' not found` — CLT saknar makro-pluginet `libTestingMacros.dylib`, så `@Test`/`#expect` kan inte expanderas
+
+Båda betyder samma sak: **tester kräver hela Xcode**, CLT räcker inte. Så här fixar du det:
+
+1. Installera Xcode från App Store om det saknas (`ls /Applications`).
+2. Byt aktivt verktyg och acceptera licensen:
    ```sh
-   swift --version    # ska visa Swift 6.x eller nyare
+   sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+   sudo xcodebuild -license accept
    ```
-2. Rensa cache och bygg om:
+3. Rensa cache och kör testerna:
    ```sh
    cd ~/stemsplitter-macos
    rm -rf .build
    swift test
    ```
-3. Om du fortfarande får `unable to resolve module dependency` (för `Testing` eller `XCTest`) — byt till hela Xcode som aktivt verktyg:
-   ```sh
-   sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
-   sudo xcodebuild -license accept
-   swift test
-   ```
-   (installera Xcode från App Store om det saknas i /Applications; kontrollera med `xcode-select -p` och `ls /Applications`)
-4. Vill du bara köra appen: `swift run` bygger inte testmålet och fungerar med enbart Command Line Tools.
+
+Vill du bara köra appen: `swift run` bygger inte testmålet och fungerar med enbart CLT.
 
 ## Arkitektur
 
