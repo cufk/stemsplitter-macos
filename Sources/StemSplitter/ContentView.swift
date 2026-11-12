@@ -165,7 +165,7 @@ struct ContentView: View {
                         .font(.system(size: 24))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(viewModel.playback.isLooping ? .tint : .primary)
+                .foregroundStyle(viewModel.playback.isLooping ? Color.accentColor : Color.primary)
                 .help("Loopa låten (bra vid övning)")
 
                 Spacer()
