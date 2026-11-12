@@ -36,7 +36,7 @@ struct MixMathTests {
         }
         #expect(acc == input)
 
-        var clipped = [3.0, -5.0, 0.5]
+        var clipped: [Float] = [3.0, -5.0, 0.5]
         clipped.withUnsafeMutableBufferPointer { ptr in
             MixMath.clampChannel(ptr.baseAddress!, count: clipped.count)
         }
