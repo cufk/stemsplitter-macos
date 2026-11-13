@@ -77,16 +77,10 @@ final class PlaybackEngine: ObservableObject {
         stopScheduling()
         do {
             if !engine.isRunning {
+                engine.prepare()
                 try engine.start()
             }
-            let renderTime = try await waitForRenderTime()
-            let aheadSeconds: TimeInterval = 0.5
-            let sampleRate = renderTime.sampleRate
-            let when = AVAudioTime(
-                hostTime: renderTime.hostTime + Self.secondsToHostTime(aheadSeconds),
-                sampleTime: renderTime.sampleTime + AVAudioFramePosition(aheadSeconds * sampleRate),
-                atRate: sampleRate
-            )
+            try await waitForRenderTime()
             pendingCompletions = tracks.count
             for track in tracks {
                 guard let file = files[track.kind], let player = players[track.kind] else { continue }
@@ -94,18 +88,23 @@ final class PlaybackEngine: ObservableObject {
                 let maxFrame: AVAudioFramePosition = file.length > 0 ? file.length - 1 : 0
                 let startFrame = min(AVAudioFramePosition(offset * fileRate), maxFrame)
                 file.framePosition = startFrame
-                player.scheduleFile(file, at: when) { [weak self] in
+                player.scheduleFile(file, at: nil) { [weak self] in
                     self?.handleCompletion()
                 }
-                player.play()
             }
-            startHostTime = when.hostTime
+            for track in tracks {
+                players[track.kind]?.play()
+            }
+            let startHostTime = mach_absolute_time()
+            self.startHostTime = startHostTime
             startOffset = offset
+            print("[PlaybackEngine] spelar upp \(tracks.count) stems från \(offset)s, duration=\(duration)")
             await MainActor.run {
                 isPlaying = true
                 startTimer()
             }
         } catch {
+            print("[PlaybackEngine] start misslyckades: \(error)")
             await MainActor.run {
                 isPlaying = false
             }
