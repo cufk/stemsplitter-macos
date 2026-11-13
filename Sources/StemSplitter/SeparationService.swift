@@ -52,10 +52,19 @@ final class SeparationService {
         let outputDir = Self.appSupportRoot.appendingPathComponent("separation-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
 
+        // demucs/torchaudio saknar ofta ffmpeg/mp3-stöd — konvertera till WAV först (utom om redan WAV)
+        let demucsInput: URL
+        if input.pathExtension.lowercased() == "wav" {
+            demucsInput = input
+        } else {
+            progress("Konverterar till WAV…", nil)
+            demucsInput = try AudioConverter.wavCopy(of: input)
+        }
+
         progress("Separerar stems med \(model)…", nil)
         try await runStreaming(
             launchPath: demucsPath,
-            arguments: ["-n", model, "-o", outputDir.path, input.path],
+            arguments: ["-n", model, "-o", outputDir.path, demucsInput.path],
             progress: { line in progress(line, ProgressParser.fraction(fromLine: line)) },
             failure: { status, tail in SeparationError.demucsFailed(status, tail) }
         )
