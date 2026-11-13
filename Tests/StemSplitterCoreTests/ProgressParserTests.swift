@@ -16,4 +16,9 @@ struct ProgressParserTests {
         #expect(ProgressParser.fraction(fromLine: "laddar modell...") == nil)
         #expect(ProgressParser.fraction(fromLine: "") == nil)
     }
+
+    @Test func parsesMegabyteProgress() {
+        #expect(ProgressParser.fraction(fromLine: "  ━━━ 63.9/63.9 MB 8.7 MB/s  0:00:07") == 1.0)
+        #expect(ProgressParser.fraction(fromLine: "  32.0/63.9 MB 5.6 MB/s")! ≈ 0.5)
+    }
 }
