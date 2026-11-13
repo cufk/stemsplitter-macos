@@ -97,7 +97,9 @@ Tests/
 
 1. Du väljer en lokal ljudfil.
 2. Vid första körningen skapas `~/Library/Application Support/StemSplitter/venv` och Demucs installeras där.
-3. Demucs körs lokalt: `demucs -n htdemucs -o <tmp> <fil>` → `sång.wav`, `trummor.wav`, `bas.wav`, `övrigt.wav`.
+3. Icke-WAV-filer konverteras först till WAV via AVFoundation (så demucs slipper ffmpeg).
+4. Demucs körs lokalt: `demucs -n htdemucs -d <mps|cpu> -o <tmp> <fil>` → `sång.wav`, `trummor.wav`, `bas.wav`, `övrigt.wav`. På Apple Silicon används GPU:n (MPS) automatiskt — betydligt snabbare än ren CPU.
+5. Separerade projekt cachas per fil (path+storlek+datum) under `projects/<hash>/`, så samma låt öppnas direkt nästa gång.
 4. Stemsen kopieras till ett projekt under `~/Library/Application Support/StemSplitter/projects/` och laddas i en `AVAudioEngine` med en `AVAudioPlayerNode` per stem. Alla noder schemaläggs på samma absoluta host-tid, så uppspelningen är samplesynkron.
 5. Volym per stem sätts direkt på respektive spelare (`AVAudioPlayerNode.volume`).
 6. Export mixar alla stems chunk-för-chunk (sång×gain + trummor×gain + …, klipps till [-1, 1]) och skriver en float32-WAV.

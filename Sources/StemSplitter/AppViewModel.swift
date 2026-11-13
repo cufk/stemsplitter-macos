@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import CryptoKit
 import Foundation
 import StemSplitterCore
 import UniformTypeIdentifiers
@@ -42,11 +43,26 @@ final class AppViewModel: ObservableObject {
             phase = .failed("Filformatet stöds inte: .\(input.pathExtension)")
             return
         }
+        inputURL = input
+        stems = []
+
+        // Cache: samma fil (path+storlek+datum) med alla fyra stems -> ladda direkt
+        let key = cacheKey(for: input)
+        let projectDir = SeparationService.appSupportRoot
+            .appendingPathComponent("projects/\(key)", isDirectory: true)
+        let cachedURLs = StemKind.allCases.compactMap { kind -> URL? in
+            let url = projectDir.appendingPathComponent("\(kind.rawValue).wav")
+            return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        }
+        if cachedURLs.count == StemKind.allCases.count {
+            let tracks = StemKind.allCases.map { StemTrack(kind: $0, url: projectDir.appendingPathComponent("\($0.rawValue).wav")) }
+            await finishLoad(tracks: tracks, input: input, cached: true)
+            return
+        }
+
         phase = .busy
         statusMessage = "Förbereder lokal AI-miljö (första körningen kan ta några minuter)…"
         progressFraction = nil
-        stems = []
-        inputURL = input
         do {
             let located = try await separator.separate(input: input) { message, fraction in
                 Task { @MainActor in
@@ -54,8 +70,6 @@ final class AppViewModel: ObservableObject {
                     if let fraction { self.progressFraction = fraction }
                 }
             }
-            let projectDir = SeparationService.appSupportRoot
-                .appendingPathComponent("projects/\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
             var tracks: [StemTrack] = []
             for kind in StemKind.allCases {
@@ -67,14 +81,30 @@ final class AppViewModel: ObservableObject {
             guard !tracks.isEmpty else {
                 throw SeparationService.SeparationError.noStemsFound
             }
+            await finishLoad(tracks: tracks, input: input, cached: false)
+        } catch {
+            phase = .failed(error.localizedDescription)
+        }
+    }
+
+    private func finishLoad(tracks: [StemTrack], input: URL, cached: Bool) async {
+        do {
             try playback.load(tracks)
             stems = tracks
             await computeWaveforms(for: tracks)
             phase = .ready
-            statusMessage = "Klart: \(input.lastPathComponent)"
+            statusMessage = cached ? "Klart (cachad): \(input.lastPathComponent)" : "Klart: \(input.lastPathComponent)"
         } catch {
             phase = .failed(error.localizedDescription)
         }
+    }
+
+    private func cacheKey(for url: URL) -> String {
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+        let size = values?.fileSize ?? 0
+        let modified = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
+        let digest = Insecure.SHA256.hash(data: Data("\(url.path)|\(size)|\(modified)".utf8))
+        return digest.prefix(16).map { String(format: "%02x", $0) }.joined()
     }
 
     private func computeWaveforms(for tracks: [StemTrack]) async {

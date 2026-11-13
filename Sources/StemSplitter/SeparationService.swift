@@ -46,6 +46,31 @@ final class SeparationService {
         Self.appSupportRoot.appendingPathComponent("deps-installed.flag")
     }
 
+    private var deviceFile: URL {
+        Self.appSupportRoot.appendingPathComponent("device.txt")
+    }
+
+    /// Välj mps (Apple Silicon GPU) om tillgängligt, annars cpu. Cachat i device.txt.
+    private func detectDevice() async -> String {
+        if let cached = try? String(contentsOf: deviceFile, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines), !cached.isEmpty {
+            return cached
+        }
+        let python = venvURL.appendingPathComponent("bin/python").path
+        let detected: String
+        if let output = try? await captureOutput(
+            launchPath: python,
+            arguments: ["-c", "import torch; print('mps' if torch.backends.mps.is_available() else 'cpu')"]
+        ), let last = output.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "\n").last,
+           ["mps", "cpu"].contains(last) {
+            detected = String(last)
+        } else {
+            detected = "cpu"
+        }
+        try? detected.data(using: .utf8)?.write(to: deviceFile)
+        return detected
+    }
+
     func separate(input: URL, model: String = "htdemucs", progress: @escaping (String, Double?) -> Void) async throws -> [StemKind: URL] {
         try await ensureEnvironment { message in progress(message, nil) }
 
@@ -61,10 +86,11 @@ final class SeparationService {
             demucsInput = try AudioConverter.wavCopy(of: input)
         }
 
-        progress("Separerar stems med \(model)…", nil)
+        let device = await detectDevice()
+        progress("Separerar stems med \(model) på \(device)…", nil)
         try await runStreaming(
             launchPath: demucsPath,
-            arguments: ["-n", model, "-o", outputDir.path, demucsInput.path],
+            arguments: ["-n", model, "-d", device, "-o", outputDir.path, demucsInput.path],
             progress: { line in progress(line, ProgressParser.fraction(fromLine: line)) },
             failure: { status, tail in SeparationError.demucsFailed(status, tail) }
         )

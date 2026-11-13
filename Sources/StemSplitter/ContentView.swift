@@ -12,19 +12,13 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
             Divider()
-            if case .busy = viewModel.phase {
-                busyView
-            } else if case .ready = viewModel.phase {
-                readyView
-            } else if case .failed(let message) = viewModel.phase {
-                errorView(message)
-            } else {
-                idleView
-            }
+            content
+                .padding(20)
         }
-        .padding(16)
-        .background(isTargeted ? Color.accentColor.opacity(0.08) : Color.clear)
+        .background(isTargeted ? Color.accentColor.opacity(0.06) : Color.clear)
         .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
             guard let provider = providers.first else { return false }
             provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { item, _ in
@@ -44,35 +38,69 @@ struct ContentView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 12) {
             Image(systemName: "waveform")
-                .font(.title2)
-                .foregroundStyle(.tint)
-            Text("StemSplitter")
                 .font(.title2.bold())
+                .foregroundStyle(.white)
+                .frame(width: 38, height: 38)
+                .background(
+                    LinearGradient(
+                        colors: [.pink, .purple],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: RoundedRectangle(cornerRadius: 10)
+                )
+            VStack(alignment: .leading, spacing: 2) {
+                Text("StemSplitter")
+                    .font(.title3.bold())
+                if let inputURL = viewModel.inputURL {
+                    Text(inputURL.lastPathComponent)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
             Spacer()
-            if let inputURL = viewModel.inputURL {
-                Text(inputURL.lastPathComponent)
+            if case .ready = viewModel.phase {
+                Text(viewModel.statusMessage)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             Button("Öppna ljudfil…") {
                 viewModel.openFileDialog()
             }
+            .buttonStyle(.borderedProminent)
             .keyboardShortcut("o", modifiers: .command)
         }
     }
 
+    private var content: some View {
+        Group {
+            if case .busy = viewModel.phase {
+                busyView
+            } else if case .ready = viewModel.phase {
+                readyView
+            } else if case .failed(let message) = viewModel.phase {
+                errorView(message)
+            } else {
+                idleView
+            }
+        }
+    }
+
     private var idleView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             Spacer()
-            Image(systemName: "music.note.list")
-                .font(.system(size: 48))
+            Image(systemName: "waveform.circle.fill")
+                .font(.system(size: 64))
                 .foregroundStyle(.secondary)
-            Text("Dra en lokal ljudfil hit, eller öppna en med knappen ovanför.")
+            Text("Dra en lokal ljudfil hit, eller öppna en med knappen ovanför")
+                .font(.title3)
                 .multilineTextAlignment(.center)
             Text("Filen delas upp lokalt i sång, trummor, bas och övrigt — ingen musik lämnar din Mac.")
-                .font(.footnote)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Spacer()
@@ -80,36 +108,48 @@ struct ContentView: View {
     }
 
     private var busyView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 20) {
             Spacer()
-            ProgressView(value: viewModel.progressFraction ?? 0) {
+            VStack(spacing: 14) {
+                if let fraction = viewModel.progressFraction {
+                    ProgressView(value: fraction)
+                        .progressViewStyle(.linear)
+                        .frame(width: 320)
+                } else {
+                    ProgressView()
+                        .controlSize(.large)
+                }
                 Text(viewModel.statusMessage)
-                    .lineLimit(2)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
             }
-            if viewModel.progressFraction == nil {
-                ProgressView()
-            }
+            .padding(24)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
             Spacer()
         }
     }
 
     private func errorView(_ message: String) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             Spacer()
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 40))
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 44))
                 .foregroundStyle(.yellow)
             Text("Något gick fel")
-                .font(.headline)
+                .font(.title3.bold())
             Text(message)
-                .multilineTextAlignment(.center)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 480)
             Button("Försök igen") {
                 if let url = viewModel.inputURL {
                     Task { await viewModel.load(url) }
                 }
             }
+            .buttonStyle(.borderedProminent)
             Spacer()
         }
     }
@@ -125,7 +165,6 @@ struct ContentView: View {
                 ) { kind, volume, muted in
                     viewModel.setVolume(kind, volume: volume, muted: muted)
                 }
-                Divider()
             }
             transport
             exportSection
@@ -138,85 +177,93 @@ struct ContentView: View {
     }
 
     private var transport: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 16) {
-                Button {
-                    viewModel.playback.togglePlay()
-                } label: {
-                    Image(systemName: viewModel.playback.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 36))
-                }
-                .buttonStyle(.plain)
-                .help(viewModel.playback.isPlaying ? "Paus" : "Spela")
-
-                Button {
-                    viewModel.playback.stop()
-                } label: {
-                    Image(systemName: "stop.circle")
-                        .font(.system(size: 28))
-                }
-                .buttonStyle(.plain)
-                .help("Stoppa")
-
-                Button {
-                    viewModel.playback.isLooping.toggle()
-                } label: {
-                    Image(systemName: viewModel.playback.isLooping ? "repeat.circle.fill" : "repeat.circle")
-                        .font(.system(size: 24))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(viewModel.playback.isLooping ? Color.accentColor : Color.primary)
-                .help("Loopa låten (bra vid övning)")
-
-                Spacer()
-
-                Text(TimeFormat.format(displayedPosition))
-                    .font(.caption.monospacedDigit())
-                Slider(
-                    value: $scrubValue,
-                    in: 0...max(viewModel.playback.duration, 0.001),
-                    onEditingChanged: { editing in
-                        if editing {
-                            scrubbing = true
-                        } else {
-                            viewModel.playback.seek(to: scrubValue)
-                            scrubbing = false
-                        }
-                    }
-                )
-                .onChange(of: viewModel.playback.position) { _, newValue in
-                    if !scrubbing {
-                        scrubValue = newValue
-                    }
-                }
-                Text(TimeFormat.format(viewModel.playback.duration))
-                    .font(.caption.monospacedDigit())
+        HStack(spacing: 18) {
+            Button {
+                viewModel.playback.togglePlay()
+            } label: {
+                Image(systemName: viewModel.playback.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                    .font(.system(size: 42))
+                    .foregroundStyle(.tint)
             }
+            .buttonStyle(.plain)
+            .keyboardShortcut(" ", modifiers: [])
+            .help(viewModel.playback.isPlaying ? "Paus (mellanslag)" : "Spela (mellanslag)")
+
+            Button {
+                viewModel.playback.stop()
+            } label: {
+                Image(systemName: "stop.circle.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Stoppa")
+
+            Button {
+                viewModel.playback.isLooping.toggle()
+            } label: {
+                Image(systemName: viewModel.playback.isLooping ? "repeat.circle.fill" : "repeat.circle")
+                    .font(.system(size: 26))
+                    .foregroundStyle(viewModel.playback.isLooping ? .tint : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Loopa låten (bra vid övning)")
+
+            Spacer()
+
+            Text(TimeFormat.format(displayedPosition))
+                .font(.subheadline.monospacedDigit())
+                .foregroundStyle(.secondary)
+            Slider(
+                value: $scrubValue,
+                in: 0...max(viewModel.playback.duration, 0.001),
+                onEditingChanged: { editing in
+                    if editing {
+                        scrubbing = true
+                    } else {
+                        viewModel.playback.seek(to: scrubValue)
+                        scrubbing = false
+                    }
+                }
+            )
+            .onChange(of: viewModel.playback.position) { _, newValue in
+                if !scrubbing {
+                    scrubValue = newValue
+                }
+            }
+            Text(TimeFormat.format(viewModel.playback.duration))
+                .font(.subheadline.monospacedDigit())
+                .foregroundStyle(.secondary)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
     }
 
     private var exportSection: some View {
-        VStack(spacing: 6) {
-            HStack {
-                Button("Exportera mix…") {
-                    viewModel.exportMix()
-                }
-                .disabled(viewModel.isExporting || viewModel.stems.isEmpty)
-                if viewModel.isExporting {
-                    ProgressView(value: viewModel.exportProgress)
-                        .frame(width: 160)
-                    Text("\(Int(viewModel.exportProgress * 100)) %")
-                        .font(.caption)
-                }
-                if let exportedURL = viewModel.exportedURL {
-                    Text("Sparad: \(exportedURL.lastPathComponent)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
+        HStack(spacing: 12) {
+            Button {
+                viewModel.exportMix()
+            } label: {
+                Label("Exportera mix", systemImage: "square.and.arrow.down")
             }
-            Text("Exporten använder de volymer och mutes du ställt in just nu, och sparas som en WAV-fil.")
-                .font(.footnote)
+            .buttonStyle(.bordered)
+            .disabled(viewModel.isExporting || viewModel.stems.isEmpty)
+            if viewModel.isExporting {
+                ProgressView(value: viewModel.exportProgress)
+                    .frame(width: 140)
+                Text("\(Int(viewModel.exportProgress * 100)) %")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            if let exportedURL = viewModel.exportedURL {
+                Label("Sparad: \(exportedURL.lastPathComponent)", systemImage: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
+            Spacer()
+            Text("Exporten använder de volymer och mutes du ställt in just nu (WAV).")
+                .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
