@@ -192,7 +192,12 @@ final class AppViewModel: ObservableObject {
         exportProgress = 0
         exportedURL = nil
         do {
-            try await MixerExporter.exportMix(stems: stems, to: url) { progress in
+            try await MixerExporter.exportMix(
+                stems: stems,
+                to: url,
+                pitchSemitones: playback.pitchSemitones,
+                tempo: playback.tempo
+            ) { progress in
                 Task { @MainActor in self.exportProgress = progress }
             }
             exportedURL = url

@@ -4,12 +4,20 @@ import StemSplitterCore
 enum MixerExporter {
     private static let sampleRate: Double = 44100
     private static let channels: AVAudioChannelCount = 2
-    private static let chunkFrames: AVAudioFramePosition = 44100
+    private static let chunkFrames: AVAudioFrameCount = 4096
 
-    static func exportMix(stems: [StemTrack], to outputURL: URL, progress: @escaping (Double) -> Void) async throws {
+    /// Renderar en mix offline genom samma kedja som uppspelningen:
+    /// spelare -> AVAudioUnitTimePitch (pitch/tempo) -> mixer, med per-stem volym/mute.
+    static func exportMix(
+        stems: [StemTrack],
+        to outputURL: URL,
+        pitchSemitones: Double,
+        tempo: Double,
+        progress: @escaping (Double) -> Void
+    ) async throws {
         guard !stems.isEmpty else { return }
 
-        let commonFormat = AVAudioFormat(
+        let format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: sampleRate,
             channels: channels,
@@ -17,94 +25,68 @@ enum MixerExporter {
         )!
         let outputFile = try AVAudioFile(
             forWriting: outputURL,
-            settings: commonFormat.settings,
-            commonFormat: commonFormat.commonFormat,
+            settings: format.settings,
+            commonFormat: format.commonFormat,
             interleaved: false
         )
 
-        struct StemReader {
-            let file: AVAudioFile
-            let converter: AVAudioConverter
-            let inputBuffer: AVAudioPCMBuffer
-            let gain: Float
-        }
+        let engine = AVAudioEngine()
+        var players: [AVAudioPlayerNode] = []
+        var totalDuration: TimeInterval = 0
 
-        var readers: [StemReader] = []
-        var totalFrames: AVAudioFramePosition = 0
         for stem in stems {
             let file = try AVAudioFile(forReading: stem.url)
-            guard let converter = AVAudioConverter(from: file.processingFormat, to: commonFormat) else {
-                throw ExportError.conversionFailed(stem.kind.rawValue)
-            }
-            let inputBuffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(chunkFrames))!
-            let duration = Double(file.length) / file.processingFormat.sampleRate
-            totalFrames = max(totalFrames, AVAudioFramePosition(duration * sampleRate))
-            readers.append(StemReader(
-                file: file,
-                converter: converter,
-                inputBuffer: inputBuffer,
-                gain: stem.muted ? 0 : Float(stem.volume)
-            ))
+            totalDuration = max(totalDuration, Double(file.length) / file.processingFormat.sampleRate)
+            let player = AVAudioPlayerNode()
+            let unit = AVAudioUnitTimePitch()
+            unit.pitch = Float(pitchSemitones)
+            unit.rate = Float(tempo)
+            engine.attach(player)
+            engine.attach(unit)
+            engine.connect(player, to: unit, format: file.processingFormat)
+            engine.connect(unit, to: engine.mainMixerNode, format: format)
+            player.volume = stem.muted ? 0 : Float(stem.volume)
+            player.scheduleFile(file, at: nil)
+            players.append(player)
         }
 
-        let mixBuffer = AVAudioPCMBuffer(pcmFormat: commonFormat, frameCapacity: AVAudioFrameCount(chunkFrames))!
-        let convertedBuffer = AVAudioPCMBuffer(pcmFormat: commonFormat, frameCapacity: AVAudioFrameCount(chunkFrames))!
-        var written: AVAudioFramePosition = 0
+        try engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: chunkFrames)
+        try engine.start()
+        for player in players {
+            player.play()
+        }
 
-        while written < totalFrames {
-            let wanted = min(chunkFrames, totalFrames - written)
-            let wantedCount = AVAudioFrameCount(wanted)
-            mixBuffer.frameLength = wantedCount
-            if let channelData = mixBuffer.floatChannelData {
-                for channel in 0..<Int(channels) {
-                    MixMath.zero(channelData[channel], count: Int(wantedCount))
+        let buffer = AVAudioPCMBuffer(
+            pcmFormat: engine.manualRenderingFormat,
+            frameCapacity: engine.manualRenderingMaximumFrameCount
+        )!
+        let expectedOutputFrames = AVAudioFramePosition(totalDuration * format.sampleRate / max(tempo, 0.01))
+
+        while true {
+            let status = try engine.renderOffline(buffer.frameCapacity, to: buffer)
+            if status == .success {
+                if buffer.frameLength > 0 {
+                    try outputFile.write(from: buffer)
                 }
+                progress(Double(engine.manualRenderingSampleTime) / Double(max(1, expectedOutputFrames)))
+            } else if status == .insufficientDataFromInputNode {
+                break
+            } else {
+                engine.stop()
+                throw ExportError.renderFailed
             }
-
-            for reader in readers {
-                try reader.file.read(into: reader.inputBuffer, frameCount: wantedCount)
-                let read = reader.inputBuffer.frameLength
-                guard read > 0 else { continue }
-                try reader.converter.convert(to: convertedBuffer, from: reader.inputBuffer)
-                let frames = min(convertedBuffer.frameLength, read)
-                guard frames > 0, let converted = convertedBuffer.floatChannelData else { continue }
-                if let mix = mixBuffer.floatChannelData {
-                    for channel in 0..<Int(channels) {
-                        let src = converted[channel]
-                        let dst = mix[channel]
-                        if reader.gain == 1 {
-                            MixMath.accumulate(src, dst, count: Int(frames))
-                        } else {
-                            var temp = [Float](repeating: 0, count: Int(frames))
-                            temp.withUnsafeMutableBufferPointer { tempPtr in
-                                MixMath.applyGain(src, tempPtr.baseAddress!, count: Int(frames), gain: reader.gain)
-                                MixMath.accumulate(tempPtr.baseAddress!, dst, count: Int(frames))
-                            }
-                        }
-                    }
-                }
-            }
-
-            if let channelData = mixBuffer.floatChannelData {
-                for channel in 0..<Int(channels) {
-                    MixMath.clampChannel(channelData[channel], count: Int(wantedCount))
-                }
-            }
-
-            try outputFile.write(from: mixBuffer)
-            written += wanted
-            progress(Double(written) / Double(totalFrames))
             await Task.yield()
         }
+        engine.stop()
+        progress(1)
     }
 
     enum ExportError: LocalizedError {
-        case conversionFailed(String)
+        case renderFailed
 
         var errorDescription: String? {
             switch self {
-            case .conversionFailed(let name):
-                return "Kunde inte konvertera stem-filen \(name) till ett gemensamt format."
+            case .renderFailed: return "Offline-renderingen misslyckades."
             }
         }
     }
