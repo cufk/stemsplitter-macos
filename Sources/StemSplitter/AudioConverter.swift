@@ -40,7 +40,7 @@ enum AudioConverter {
             try source.read(into: inputBuffer, frameCount: 4096)
             let read = inputBuffer.frameLength
             if read == 0 { break }
-            converter.convert(to: outputBuffer, from: inputBuffer)
+            try converter.convert(to: outputBuffer, from: inputBuffer)
             if outputBuffer.frameLength > 0 {
                 try destinationFile.write(from: outputBuffer)
             }
