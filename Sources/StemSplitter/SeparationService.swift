@@ -86,14 +86,29 @@ final class SeparationService {
             demucsInput = try AudioConverter.wavCopy(of: input)
         }
 
+        func runDemucs(device: String) async throws {
+            progress("Separerar stems med \(model) på \(device)…", nil)
+            try await runStreaming(
+                launchPath: demucsPath,
+                arguments: ["-n", model, "-d", device, "-o", outputDir.path, demucsInput.path],
+                progress: { line in progress(line, ProgressParser.fraction(fromLine: line)) },
+                failure: { status, tail in SeparationError.demucsFailed(status, tail) }
+            )
+        }
+
         let device = await detectDevice()
-        progress("Separerar stems med \(model) på \(device)…", nil)
-        try await runStreaming(
-            launchPath: demucsPath,
-            arguments: ["-n", model, "-d", device, "-o", outputDir.path, demucsInput.path],
-            progress: { line in progress(line, ProgressParser.fraction(fromLine: line)) },
-            failure: { status, tail in SeparationError.demucsFailed(status, tail) }
-        )
+        do {
+            try await runDemucs(device: device)
+        } catch {
+            // MPS kan sakna stöd för vissa opar i htdemucs — fall tillbaka på CPU
+            if device == "mps" {
+                progress("MPS funkade inte — kör om på CPU…", nil)
+                try? FileManager.default.removeItem(at: deviceFile)
+                try await runDemucs(device: "cpu")
+            } else {
+                throw error
+            }
+        }
 
         let located = try StemLocator.locate(in: outputDir)
         guard !located.isEmpty else { throw SeparationError.noStemsFound }
