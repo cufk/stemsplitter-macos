@@ -1,6 +1,5 @@
 import AppKit
 import Combine
-import CryptoKit
 import Foundation
 import StemSplitterCore
 import UniformTypeIdentifiers
@@ -103,8 +102,15 @@ final class AppViewModel: ObservableObject {
         let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
         let size = values?.fileSize ?? 0
         let modified = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
-        let digest = Insecure.SHA256.hash(data: Data("\(url.path)|\(size)|\(modified)".utf8))
-        return digest.prefix(16).map { String(format: "%02x", $0) }.joined()
+        return fnv1a("\(url.path)|\(size)|\(modified)")
+    }
+
+    private func fnv1a(_ string: String) -> String {
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in string.utf8 {
+            hash = (hash ^ UInt64(byte)) &* 0x100000001b3
+        }
+        return String(format: "%016llx", hash)
     }
 
     private func computeWaveforms(for tracks: [StemTrack]) async {

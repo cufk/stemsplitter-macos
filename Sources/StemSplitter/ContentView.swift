@@ -204,7 +204,7 @@ struct ContentView: View {
             } label: {
                 Image(systemName: viewModel.playback.isLooping ? "repeat.circle.fill" : "repeat.circle")
                     .font(.system(size: 26))
-                    .foregroundStyle(viewModel.playback.isLooping ? .tint : .secondary)
+                    .foregroundStyle(viewModel.playback.isLooping ? Color.accentColor : Color.secondary)
             }
             .buttonStyle(.plain)
             .help("Loopa låten (bra vid övning)")
