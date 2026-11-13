@@ -16,9 +16,10 @@ echo "Anvander Python: $PYTHON_BIN ($("$PYTHON_BIN" --version 2>&1))"
 
 PIP="$VENV_DIR/bin/pip"
 "$PIP" install --upgrade pip setuptools wheel
-# CPU-only torch håller nedladdningen betydligt mindre.
-# torch 2.5.1 ar senaste versionen med cp39-wheel for macOS (CLT:s python3 ar 3.9).
-"$PIP" install --index-url https://download.pytorch.org/whl/cpu "torch==2.5.1"
+# demucs 4.0.1 forst, sedan tvingar vi ned torch/torchaudio till 2.5.1:
+# torch >=2.6 bryter demucs modell-laddning (weights_only default), och
+# 2.5.1 ar senaste med cp39-wheel for macOS (CLT:s python3 ar 3.9).
 "$PIP" install "demucs==4.0.1"
+"$PIP" install --index-url https://download.pytorch.org/whl/cpu "torch==2.5.1" "torchaudio==2.5.1"
 
-"$VENV_DIR/bin/python" -c "import demucs; print('demucs', demucs.__version__)"
+"$VENV_DIR/bin/python" -c "import demucs, torch; print('demucs', demucs.__version__, '| torch', torch.__version__)"

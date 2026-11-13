@@ -108,6 +108,8 @@ final class SeparationService {
         process.arguments = arguments
         var environment = ProcessInfo.processInfo.environment
         environment["PYTHONUNBUFFERED"] = "1"
+        // demucs 4.0.1 + torch >=2.6: undvik weights_only-fel vid modell-laddning
+        environment["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
         process.environment = environment
 
         let pipe = Pipe()
@@ -140,9 +142,12 @@ final class SeparationService {
                         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
                         if !trimmed.isEmpty {
                             progress(trimmed)
-                            tail.append(trimmed)
-                            if tail.count > 30 {
-                                tail.removeFirst(tail.count - 30)
+                            let isProgressSpam = trimmed.contains("%|") || trimmed.contains("MB/s") || trimmed.contains("it/s]") || trimmed.contains("s/it]")
+                            if !isProgressSpam {
+                                tail.append(trimmed)
+                                if tail.count > 30 {
+                                    tail.removeFirst(tail.count - 30)
+                                }
                             }
                         }
                     }
