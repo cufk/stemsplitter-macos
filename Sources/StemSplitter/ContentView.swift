@@ -108,25 +108,20 @@ struct ContentView: View {
     }
 
     private var busyView: some View {
-        VStack(spacing: 20) {
+        VStack {
             Spacer()
-            VStack(spacing: 14) {
+            VStack(spacing: 12) {
                 if let fraction = viewModel.progressFraction {
                     ProgressView(value: fraction)
                         .progressViewStyle(.linear)
                         .frame(width: 320)
+                    Text("\(Int(fraction * 100)) %")
+                        .font(.title3.bold().monospacedDigit())
                 } else {
                     ProgressView()
                         .controlSize(.large)
                 }
-                Text(viewModel.statusMessage)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 420)
             }
-            .padding(24)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
             Spacer()
         }
     }

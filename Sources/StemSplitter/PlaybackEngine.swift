@@ -3,16 +3,6 @@ import Combine
 import StemSplitterCore
 
 final class PlaybackEngine: ObservableObject {
-    enum PlaybackError: LocalizedError {
-        case noRenderTime
-
-        var errorDescription: String? {
-            switch self {
-            case .noRenderTime: return "Ljudmotorn kunde inte startas."
-            }
-        }
-    }
-
     @Published var isPlaying = false
     @Published var isLooping = false
     @Published var position: TimeInterval = 0
@@ -80,7 +70,6 @@ final class PlaybackEngine: ObservableObject {
                 engine.prepare()
                 try engine.start()
             }
-            try await waitForRenderTime()
             pendingCompletions = tracks.count
             for track in tracks {
                 guard let file = files[track.kind], let player = players[track.kind] else { continue }
@@ -156,17 +145,6 @@ final class PlaybackEngine: ObservableObject {
         var info = mach_timebase_info_data_t()
         mach_timebase_info(&info)
         return Double(hostTime) * Double(info.numer) / Double(info.denom) / 1e9
-    }
-
-    private func waitForRenderTime() async throws -> AVAudioTime {
-        let deadline = Date().addingTimeInterval(2)
-        while Date() < deadline {
-            if let renderTime = engine.mainMixerNode.lastRenderTime {
-                return renderTime
-            }
-            try await Task.sleep(nanoseconds: 5_000_000)
-        }
-        throw PlaybackError.noRenderTime
     }
 
     private func handleCompletion() {
