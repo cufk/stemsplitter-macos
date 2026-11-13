@@ -50,7 +50,7 @@ enum MixerExporter {
             players.append(player)
         }
 
-        try engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: chunkFrames)
+        try await engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: chunkFrames)
         try engine.start()
         for player in players {
             player.play()
