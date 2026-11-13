@@ -3,18 +3,15 @@ import StemSplitterCore
 
 final class SeparationService {
     enum SeparationError: LocalizedError {
-        case noPython
-        case pythonTooOld(String)
+        case pythonMissing
         case bootstrapFailed(Int32, String)
         case demucsFailed(Int32, String)
         case noStemsFound
 
         var errorDescription: String? {
             switch self {
-            case .noPython:
-                return "Hittade ingen python3. Installera Command Line Tools for Xcode (xcode-select --install) eller ett Python 3.9+-paket från python.org."
-            case .pythonTooOld(let version):
-                return "python3 \(version) är för gammal — StemSplitter behöver Python 3.9 eller nyare."
+            case .pythonMissing:
+                return "Hittade ingen Python 3.9+. Appen kan ladda ner och installera Python från python.org åt dig."
             case .bootstrapFailed(let status, let tail):
                 return "Kunde inte installera beroenden i den lokala Python-miljön (exitkod \(status)). Kontrollera internetanslutningen. Senaste loggrader:\n\(tail)"
             case .demucsFailed(let status, let tail):
@@ -44,6 +41,17 @@ final class SeparationService {
 
     private var installMarker: URL {
         Self.appSupportRoot.appendingPathComponent("deps-installed.flag")
+    }
+
+    private var pythonPath: String?
+
+    private func ensurePython() async throws -> String {
+        if let pythonPath { return pythonPath }
+        guard let found = await PythonLocator.find() else {
+            throw SeparationError.pythonMissing
+        }
+        pythonPath = found.path
+        return found.path
     }
 
     private var deviceFile: URL {
@@ -121,36 +129,26 @@ final class SeparationService {
            fileManager.fileExists(atPath: demucsPath) {
             return
         }
-        try await checkPython()
+        let python = try await ensurePython()
         guard let script = Bundle.module.url(forResource: "bootstrap", withExtension: "sh") else {
-            throw SeparationError.noPython
+            throw SeparationError.pythonMissing
         }
         progress("Skapar lokal Python-miljö och installerar Demucs (kan ta flera minuter första gången)…")
         try await runStreaming(
             launchPath: "/bin/sh",
             arguments: [script.path, venvURL.path],
             progress: progress,
+            extraEnv: ["PYTHON_BIN": python],
             failure: { status, tail in SeparationError.bootstrapFailed(status, tail) }
         )
         fileManager.createFile(atPath: installMarker.path, contents: Date().description.data(using: .utf8))
-    }
-
-    private func checkPython() async throws {
-        let version = try await captureOutput(
-            launchPath: "/usr/bin/env",
-            arguments: ["python3", "-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"]
-        )
-        let trimmed = version.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = trimmed.split(separator: ".").compactMap { Int($0) }
-        guard parts.count == 2, parts[0] > 3 || (parts[0] == 3 && parts[1] >= 9) else {
-            throw SeparationError.pythonTooOld(trimmed.isEmpty ? "okänd" : trimmed)
-        }
     }
 
     private func runStreaming(
         launchPath: String,
         arguments: [String],
         progress: @escaping (String) -> Void,
+        extraEnv: [String: String] = [:],
         failure: @escaping (Int32, String) -> Error
     ) async throws {
         let process = Process()
@@ -160,6 +158,9 @@ final class SeparationService {
         environment["PYTHONUNBUFFERED"] = "1"
         // demucs 4.0.1 + torch >=2.6: undvik weights_only-fel vid modell-laddning
         environment["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
+        for (key, value) in extraEnv {
+            environment[key] = value
+        }
         process.environment = environment
 
         let pipe = Pipe()
@@ -225,7 +226,7 @@ final class SeparationService {
                     if process.terminationStatus == 0 {
                         continuation.resume(returning: String(data: collected, encoding: .utf8) ?? "")
                     } else {
-                        continuation.resume(throwing: SeparationError.noPython)
+                        continuation.resume(throwing: SeparationError.pythonMissing)
                     }
                     return
                 }

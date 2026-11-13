@@ -21,6 +21,7 @@ final class AppViewModel: ObservableObject {
     @Published var isExporting = false
     @Published var exportProgress: Double = 0
     @Published var exportedURL: URL?
+    @Published var showPythonInstallPrompt = false
 
     let playback = PlaybackEngine()
     private let separator = SeparationService()
@@ -44,6 +45,8 @@ final class AppViewModel: ObservableObject {
         }
         inputURL = input
         stems = []
+
+        guard await ensurePythonOrPrompt() else { return }
 
         // Cache: samma fil (path+storlek+datum) med alla fyra stems -> ladda direkt
         let key = cacheKey(for: input)
@@ -83,6 +86,44 @@ final class AppViewModel: ObservableObject {
             await finishLoad(tracks: tracks, input: input, cached: false)
         } catch {
             phase = .failed(error.localizedDescription)
+        }
+    }
+
+    private func ensurePythonOrPrompt() async -> Bool {
+        if await PythonLocator.find() != nil {
+            return true
+        }
+        await MainActor.run {
+            showPythonInstallPrompt = true
+        }
+        return false
+    }
+
+    func installPython() {
+        showPythonInstallPrompt = false
+        Task {
+            await MainActor.run {
+                phase = .busy
+                statusMessage = "Laddar ner Python 3.12 från python.org…"
+                progressFraction = 0
+            }
+            do {
+                let pkg = try await PythonInstaller.download { fraction in
+                    Task { @MainActor in
+                        self.progressFraction = fraction
+                        self.statusMessage = "Laddar ner Python 3.12… \(Int(fraction * 100)) %"
+                    }
+                }
+                PythonInstaller.openInstaller(at: pkg)
+                await MainActor.run {
+                    phase = .idle
+                    statusMessage = "Installera paketet i Installer (ange lösenord), starta sedan om StemSplitter."
+                }
+            } catch {
+                await MainActor.run {
+                    phase = .failed("Kunde inte ladda ner Python: \(error.localizedDescription)")
+                }
+            }
         }
     }
 

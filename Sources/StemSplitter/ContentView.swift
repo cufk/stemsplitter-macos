@@ -20,6 +20,14 @@ struct ContentView: View {
                 .padding(20)
         }
         .background(isTargeted ? Color.accentColor.opacity(0.06) : Color.clear)
+        .alert("Python 3.9+ saknas", isPresented: $viewModel.showPythonInstallPrompt) {
+            Button("Ladda ner och installera") {
+                viewModel.installPython()
+            }
+            Button("Avbryt", role: .cancel) {}
+        } message: {
+            Text("StemSplitter behöver Python 3.9+ för att köra AI-separationen lokalt. Vill du ladda ner den officiella Python 3.12-installationen från python.org (ca 45 MB)? Du installerar paketet själv i Installer och startar sedan om appen.")
+        }
         .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
             guard let provider = providers.first else { return false }
             provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { item, _ in
