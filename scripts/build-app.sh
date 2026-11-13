@@ -21,14 +21,20 @@ for bundle in "$ROOT"/.build/release/*.bundle; do
     [ -e "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
 done
 
-# Bygg AppIcon.icns fran Packaging/AppIcon.jpg (sips + iconutil finns pa macOS)
-echo "==> Genererar AppIcon.icns"
+# Bygg AppIcon.icns fran Packaging/AppIcon.jpg, med rundade hörn bakade i bilden
+echo "==> Genererar AppIcon.icns (rundade hörn)"
 ICONSET="$(mktemp -d)/AppIcon.iconset"
 mkdir -p "$ICONSET"
-for size in 16 32 128 256 512; do
-    sips -z "$size" "$size" -s format png "$ROOT/Packaging/AppIcon.jpg" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
-    sips -z "$((size * 2))" "$((size * 2))" -s format png "$ROOT/Packaging/AppIcon.jpg" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
-done
+if swift "$ROOT/scripts/round-icon.swift" "$ROOT/Packaging/AppIcon.jpg" "$ICONSET" 2>/dev/null \
+   && [ -f "$ICONSET/icon_512x512@2x.png" ]; then
+    : # rundade ikoner klara
+else
+    echo "    ( föll tillbaka på sips utan rundning )"
+    for size in 16 32 128 256 512; do
+        sips -z "$size" "$size" -s format png "$ROOT/Packaging/AppIcon.jpg" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+        sips -z "$((size * 2))" "$((size * 2))" -s format png "$ROOT/Packaging/AppIcon.jpg" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
+    done
+fi
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
 # Ad-hoc-signera sa Gatekeeper inte klagar (lokalt bruk)
