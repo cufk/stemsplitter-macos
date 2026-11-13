@@ -3,8 +3,10 @@ import Testing
 
 struct PythonVersionTests {
     @Test func parsesVersionOutput() {
-        #expect(PythonVersion.parse("Python 3.9.6") == (3, 9))
-        #expect(PythonVersion.parse("Python 3.12.10") == (3, 12))
+        let v = PythonVersion.parse("Python 3.9.6")
+        #expect(v?.major == 3 && v?.minor == 9)
+        let v2 = PythonVersion.parse("Python 3.12.10")
+        #expect(v2?.major == 3 && v2?.minor == 12)
         #expect(PythonVersion.parse("garbage") == nil)
     }
 
