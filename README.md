@@ -62,6 +62,15 @@ Båda betyder samma sak: **tester kräver hela Xcode**, CLT räcker inte. Så h�
 
 Efter Xcode-installationen: `swift run` startar appen, `swift test` kör testerna.
 
+## Bygg en fristående .app
+
+```sh
+./scripts/build-app.sh
+open build/StemSplitter.app
+```
+
+Skriptet kor `swift build -c release` och paketerar binären + `Packaging/Info.plist` + SPM-resursbunten (bootstrap.sh) till `build/StemSplitter.app`, ad-hoc-signar den och gor att du kan starta den fran Finder/Dock som vilken app som helst. (For notarering/distribution utanfor din egen Mac kraver ett Apple Developer-konto — gor da arkivet i Xcode: Product → Archive.)
+
 ## CI och dev-agent
 
 - `.github/workflows/ci.yml` kör `swift build` + `swift test` på en `macos-14`-runner vid push/PR.
