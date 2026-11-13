@@ -46,7 +46,7 @@ enum MixerExporter {
             engine.connect(player, to: unit, format: file.processingFormat)
             engine.connect(unit, to: engine.mainMixerNode, format: format)
             player.volume = stem.muted ? 0 : Float(stem.volume)
-            player.scheduleFile(file, at: nil)
+            try await player.scheduleFile(file, at: nil)
             players.append(player)
         }
 
