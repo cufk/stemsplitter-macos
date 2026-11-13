@@ -64,12 +64,32 @@ final class PlaybackEngine: ObservableObject {
 
     func play(from offset: TimeInterval) async {
         guard !tracks.isEmpty else { return }
-        stopScheduling()
+        await MainActor.run {
+            isPlaying = false
+            stopTimer()
+        }
+        // Bygg om hela ljudgrafen från början — undviker stale-läge efter stop/paus
+        for (_, player) in players {
+            player.stop()
+            engine.detach(player)
+        }
+        players.removeAll()
+        files.removeAll()
+        if engine.isRunning {
+            engine.stop()
+        }
         do {
-            if !engine.isRunning {
-                engine.prepare()
-                try engine.start()
+            for track in tracks {
+                let file = try AVAudioFile(forReading: track.url)
+                let player = AVAudioPlayerNode()
+                engine.attach(player)
+                engine.connect(player, to: engine.mainMixerNode, format: file.processingFormat)
+                player.volume = track.muted ? 0 : Float(track.volume)
+                files[track.kind] = file
+                players[track.kind] = player
             }
+            engine.prepare()
+            try engine.start()
             pendingCompletions = tracks.count
             for track in tracks {
                 guard let file = files[track.kind], let player = players[track.kind] else { continue }
@@ -84,8 +104,7 @@ final class PlaybackEngine: ObservableObject {
             for track in tracks {
                 players[track.kind]?.play()
             }
-            let startHostTime = mach_absolute_time()
-            self.startHostTime = startHostTime
+            startHostTime = mach_absolute_time()
             startOffset = offset
             print("[PlaybackEngine] spelar upp \(tracks.count) stems från \(offset)s, duration=\(duration)")
             await MainActor.run {
