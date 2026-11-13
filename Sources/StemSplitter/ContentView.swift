@@ -189,9 +189,48 @@ struct ContentView: View {
                 }
             }
             Spacer()
+            tuningCard
             exportSection
             transportCard
         }
+    }
+
+    private var tuningCard: some View {
+        HStack(spacing: 28) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Tonläge (pitch)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Slider(value: $playback.pitchSemitones, in: -12...12, step: 1)
+                        .frame(width: 160)
+                    Text("\(Int(playback.pitchSemitones)) st")
+                        .font(.caption.monospacedDigit())
+                        .frame(width: 44, alignment: .trailing)
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Tempo")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Slider(value: $playback.tempo, in: 0.5...2.0, step: 0.05)
+                        .frame(width: 160)
+                    Text(String(format: "%.2f×", playback.tempo))
+                        .font(.caption.monospacedDigit())
+                        .frame(width: 44, alignment: .trailing)
+                }
+            }
+            Spacer()
+            Button("Återställ") {
+                playback.resetTuning()
+            }
+            .buttonStyle(.bordered)
+            .help("Tonläge 0 st och tempo 1.00×")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
     }
 
     private var displayedPosition: Double {

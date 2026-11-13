@@ -8,8 +8,19 @@ final class PlaybackEngine: ObservableObject {
     @Published var position: TimeInterval = 0
     @Published var duration: TimeInterval = 0
 
+    /// Tonläge i halvtoner (-12...+12). Ändrar INTE tempo.
+    @Published var pitchSemitones: Double = 0 {
+        didSet { applyPitch() }
+    }
+
+    /// Tempo som multipel (0.5...2.0). Ändrar INTE tonläge.
+    @Published var tempo: Double = 1.0 {
+        didSet { applyTempo() }
+    }
+
     private let engine = AVAudioEngine()
     private var players: [StemKind: AVAudioPlayerNode] = [:]
+    private var timePitches: [StemKind: AVAudioUnitTimePitch] = [:]
     private var files: [StemKind: AVAudioFile] = [:]
     private var tracks: [StemTrack] = []
     private var startHostTime: UInt64 = 0
@@ -20,19 +31,41 @@ final class PlaybackEngine: ObservableObject {
     func load(_ newTracks: [StemTrack]) throws {
         unload()
         tracks = newTracks
-        var maxDuration: TimeInterval = 0
-        for track in newTracks {
+        try buildGraph()
+        duration = tracks.reduce(0) { max($0, files[$1.kind].map { Double($0.length) / $0.processingFormat.sampleRate } ?? 0) }
+        position = 0
+    }
+
+    /// Bygger (om) hela ljudgrafen: spelare -> AVAudioUnitTimePitch -> mixer.
+    private func buildGraph() throws {
+        for (_, player) in players {
+            player.stop()
+            engine.detach(player)
+        }
+        for (_, unit) in timePitches {
+            engine.detach(unit)
+        }
+        players.removeAll()
+        timePitches.removeAll()
+        files.removeAll()
+        if engine.isRunning {
+            engine.stop()
+        }
+        for track in tracks {
             let file = try AVAudioFile(forReading: track.url)
             let player = AVAudioPlayerNode()
+            let unit = AVAudioUnitTimePitch()
+            unit.pitch = Float(pitchSemitones)
+            unit.rate = Float(tempo)
             engine.attach(player)
-            engine.connect(player, to: engine.mainMixerNode, format: file.processingFormat)
+            engine.attach(unit)
+            engine.connect(player, to: unit, format: file.processingFormat)
+            engine.connect(unit, to: engine.mainMixerNode, format: file.processingFormat)
             player.volume = track.muted ? 0 : Float(track.volume)
             files[track.kind] = file
             players[track.kind] = player
-            maxDuration = max(maxDuration, Double(file.length) / file.processingFormat.sampleRate)
+            timePitches[track.kind] = unit
         }
-        duration = maxDuration
-        position = 0
     }
 
     func unload() {
@@ -40,7 +73,11 @@ final class PlaybackEngine: ObservableObject {
         for (_, player) in players {
             engine.detach(player)
         }
+        for (_, unit) in timePitches {
+            engine.detach(unit)
+        }
         players.removeAll()
+        timePitches.removeAll()
         files.removeAll()
         tracks.removeAll()
         duration = 0
@@ -49,6 +86,28 @@ final class PlaybackEngine: ObservableObject {
 
     func setVolume(_ kind: StemKind, volume: Double, muted: Bool) {
         players[kind]?.volume = muted ? 0 : Float(volume)
+    }
+
+    private func applyPitch() {
+        for (_, unit) in timePitches {
+            unit.pitch = Float(pitchSemitones)
+        }
+    }
+
+    private func applyTempo() {
+        if isPlaying {
+            updatePosition()
+            startOffset = position
+            startHostTime = mach_absolute_time()
+        }
+        for (_, unit) in timePitches {
+            unit.rate = Float(tempo)
+        }
+    }
+
+    func resetTuning() {
+        pitchSemitones = 0
+        tempo = 1.0
     }
 
     func togglePlay() {
@@ -68,26 +127,8 @@ final class PlaybackEngine: ObservableObject {
             isPlaying = false
             stopTimer()
         }
-        // Bygg om hela ljudgrafen från början — undviker stale-läge efter stop/paus
-        for (_, player) in players {
-            player.stop()
-            engine.detach(player)
-        }
-        players.removeAll()
-        files.removeAll()
-        if engine.isRunning {
-            engine.stop()
-        }
         do {
-            for track in tracks {
-                let file = try AVAudioFile(forReading: track.url)
-                let player = AVAudioPlayerNode()
-                engine.attach(player)
-                engine.connect(player, to: engine.mainMixerNode, format: file.processingFormat)
-                player.volume = track.muted ? 0 : Float(track.volume)
-                files[track.kind] = file
-                players[track.kind] = player
-            }
+            try buildGraph()
             engine.prepare()
             try engine.start()
             pendingCompletions = tracks.count
@@ -106,7 +147,7 @@ final class PlaybackEngine: ObservableObject {
             }
             startHostTime = mach_absolute_time()
             startOffset = offset
-            print("[PlaybackEngine] spelar upp \(tracks.count) stems från \(offset)s, duration=\(duration)")
+            print("[PlaybackEngine] spelar upp \(tracks.count) stems från \(offset)s, tempo=\(tempo), pitch=\(pitchSemitones)")
             await MainActor.run {
                 isPlaying = true
                 startTimer()
@@ -197,6 +238,6 @@ final class PlaybackEngine: ObservableObject {
         guard isPlaying, startHostTime != 0 else { return }
         let now = mach_absolute_time()
         let elapsed = Self.hostTimeToSeconds(now) - Self.hostTimeToSeconds(startHostTime)
-        position = min(startOffset + elapsed, duration)
+        position = min(startOffset + elapsed * tempo, duration)
     }
 }

@@ -11,6 +11,7 @@ All bearbetning sker **100 % lokalt på din Mac**. Ingen ljudfil skickas någons
 - Välj en lokal ljudfil (WAV, AIFF, CAF, MP3, M4A, AAC, FLAC) via dialog eller drag-and-drop
 - Stem-separation lokalt med [Demucs](https://github.com/facebookresearch/demucs) (`htdemucs`: sång / trummor / bas / övrigt)
 - Uppspelning med **individuell volym och mute per stem**, synkroniserad uppspelning
+- **Tonläge (pitch)** och **tempo** som separata reglage — pitch ändrar inte tempo och tvärtom (via `AVAudioUnitTimePitch` per stem)
 - Play / paus / stop / loop och sökning i låten
 - Vågformsvisning per stem
 - Export av en mixad WAV-fil med dina aktuella volyminställningar
