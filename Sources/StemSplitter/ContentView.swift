@@ -69,6 +69,15 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            if case .ready = viewModel.phase {
+                Button {
+                    viewModel.exportMix()
+                } label: {
+                    Label("Exportera mix", systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isExporting)
+            }
             Button("Öppna ljudfil…") {
                 viewModel.openFileDialog()
             }
@@ -230,17 +239,10 @@ struct ContentView: View {
 
     private var exportSection: some View {
         HStack(spacing: 12) {
-            Button {
-                viewModel.exportMix()
-            } label: {
-                Label("Exportera mix", systemImage: "square.and.arrow.down")
-            }
-            .buttonStyle(.bordered)
-            .disabled(viewModel.isExporting || viewModel.stems.isEmpty)
             if viewModel.isExporting {
                 ProgressView(value: viewModel.exportProgress)
                     .frame(width: 140)
-                Text("\(Int(viewModel.exportProgress * 100)) %")
+                Text("Exporterar… \(Int(viewModel.exportProgress * 100)) %")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
