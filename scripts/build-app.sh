@@ -23,11 +23,16 @@ done
 
 # Ad-hoc-signera sa Gatekeeper inte klagar (lokalt bruk)
 if command -v codesign >/dev/null 2>&1; then
-    codesign --force --deep --sign - "$APP" 2>/dev/null || true
+    codesign --force --deep --sign - "$APP"
+    if codesign --verify --deep --strict -v "$APP" 2>/dev/null; then
+        echo "==> Signatur verifierad (ad-hoc)"
+    else
+        echo "==> VARNING: signaturen kunde inte verifieras — Gatekeeper kan blockera appen"
+    fi
 fi
 
-# Ta bort quarantine om filen kommer fran nedladdning
-xattr -d com.apple.quarantine "$APP" 2>/dev/null || true
+# Ta bort quarantine om filen kommer fran nedladdning/overforing
+xattr -cr "$APP" 2>/dev/null || true
 
 echo "==> Klart: $APP"
-echo "    Starta med: open \"$APP\""
+echo "    Starta med: open \"$APP\"  (forsta gangen: hogerklicka → Oppna om Gatekeeper klagar)"

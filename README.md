@@ -69,7 +69,17 @@ Efter Xcode-installationen: `swift run` startar appen, `swift test` kör testern
 open build/StemSplitter.app
 ```
 
-Skriptet kor `swift build -c release` och paketerar binären + `Packaging/Info.plist` + SPM-resursbunten (bootstrap.sh) till `build/StemSplitter.app`, ad-hoc-signar den och gor att du kan starta den fran Finder/Dock som vilken app som helst. (For notarering/distribution utanfor din egen Mac kraver ett Apple Developer-konto — gor da arkivet i Xcode: Product → Archive.)
+Skriptet kor `swift build -c release` och paketerar binären + `Packaging/Info.plist` + SPM-resursbunten (bootstrap.sh) till `build/StemSplitter.app`, ad-hoc-signar den och verifierar signaturen.
+
+Om Gatekeeper ändå blockerar (t.ex. efter att appen kopierats/nedladdats, `spctl --assess` säger "rejected"):
+
+```sh
+xattr -cr build/StemSplitter.app
+codesign --force --deep --sign - build/StemSplitter.app
+open build/StemSplitter.app
+```
+
+Forsta gangen kan du också behöva högerklicka på appen → **Öppna** (eller Systeminställningar → Integritet och säkerhet → "Öppna ändå"). För notarering/distribution utanför din egen Mac krävs ett Apple Developer-konto (Xcode → Product → Archive).
 
 ## CI och dev-agent
 
