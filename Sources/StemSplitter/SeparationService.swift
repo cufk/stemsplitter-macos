@@ -5,8 +5,8 @@ final class SeparationService {
     enum SeparationError: LocalizedError {
         case noPython
         case pythonTooOld(String)
-        case bootstrapFailed(Int32)
-        case demucsFailed(Int32)
+        case bootstrapFailed(Int32, String)
+        case demucsFailed(Int32, String)
         case noStemsFound
 
         var errorDescription: String? {
@@ -15,10 +15,10 @@ final class SeparationService {
                 return "Hittade ingen python3. Installera Command Line Tools for Xcode (xcode-select --install) eller ett Python 3.9+-paket från python.org."
             case .pythonTooOld(let version):
                 return "python3 \(version) är för gammal — StemSplitter behöver Python 3.9 eller nyare."
-            case .bootstrapFailed(let status):
-                return "Kunde inte installera beroenden i den lokala Python-miljön (exitkod \(status)). Kontrollera internetanslutningen och försök igen."
-            case .demucsFailed(let status):
-                return "Demucs avslutades med fel (exitkod \(status))."
+            case .bootstrapFailed(let status, let tail):
+                return "Kunde inte installera beroenden i den lokala Python-miljön (exitkod \(status)). Kontrollera internetanslutningen. Senaste loggrader:\n\(tail)"
+            case .demucsFailed(let status, let tail):
+                return "Demucs avslutades med fel (exitkod \(status)). Senaste loggrader:\n\(tail)"
             case .noStemsFound:
                 return "Inga stem-filer hittades i utdatan från Demucs."
             }
@@ -57,7 +57,7 @@ final class SeparationService {
             launchPath: demucsPath,
             arguments: ["-n", model, "-o", outputDir.path, input.path],
             progress: { line in progress(line, ProgressParser.fraction(fromLine: line)) },
-            failure: SeparationError.demucsFailed
+            failure: { status, tail in SeparationError.demucsFailed(status, tail) }
         )
 
         let located = try StemLocator.locate(in: outputDir)
@@ -80,7 +80,7 @@ final class SeparationService {
             launchPath: "/bin/sh",
             arguments: [script.path, venvURL.path],
             progress: progress,
-            failure: SeparationError.bootstrapFailed
+            failure: { status, tail in SeparationError.bootstrapFailed(status, tail) }
         )
         fileManager.createFile(atPath: installMarker.path, contents: Date().description.data(using: .utf8))
     }
@@ -101,7 +101,7 @@ final class SeparationService {
         launchPath: String,
         arguments: [String],
         progress: @escaping (String) -> Void,
-        failure: @escaping (Int32) -> Error
+        failure: @escaping (Int32, String) -> Error
     ) async throws {
         let process = Process()
         process.launchPath = launchPath
@@ -117,6 +117,7 @@ final class SeparationService {
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             var buffer = Data()
+            var tail: [String] = []
             let box = ContinuationBox(continuation: continuation)
             pipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
@@ -127,7 +128,7 @@ final class SeparationService {
                     if status == 0 {
                         box.resume()
                     } else {
-                        box.resume(throwing: failure(status))
+                        box.resume(throwing: failure(status, tail.suffix(30).joined(separator: "\n")))
                     }
                     return
                 }
@@ -139,6 +140,10 @@ final class SeparationService {
                         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
                         if !trimmed.isEmpty {
                             progress(trimmed)
+                            tail.append(trimmed)
+                            if tail.count > 30 {
+                                tail.removeFirst(tail.count - 30)
+                            }
                         }
                     }
                 }
