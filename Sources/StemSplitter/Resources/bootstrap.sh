@@ -21,5 +21,7 @@ PIP="$VENV_DIR/bin/pip"
 # 2.5.1 ar senaste med cp39-wheel for macOS (CLT:s python3 ar 3.9).
 "$PIP" install "demucs==4.0.1"
 "$PIP" install --index-url https://download.pytorch.org/whl/cpu "torch==2.5.1" "torchaudio==2.5.1"
+# torchaudio behöver soundfile/libsndfile för att läsa WAV utan ffmpeg
+"$PIP" install soundfile
 
 "$VENV_DIR/bin/python" -c "import demucs, torch; print('demucs', demucs.__version__, '| torch', torch.__version__)"
