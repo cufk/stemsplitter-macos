@@ -48,18 +48,27 @@ struct ContentView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            Image(systemName: "waveform")
-                .font(.title2.bold())
-                .foregroundStyle(.white)
-                .frame(width: 38, height: 38)
-                .background(
-                    LinearGradient(
-                        colors: [.pink, .purple],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: RoundedRectangle(cornerRadius: 10)
-                )
+            Group {
+                if let iconURL = Bundle.module.url(forResource: "appicon", withExtension: "jpg"),
+                   let nsImage = NSImage(contentsOf: iconURL) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Image(systemName: "waveform")
+                        .font(.title2.bold())
+                        .foregroundStyle(.white)
+                        .background(
+                            LinearGradient(
+                                colors: [.pink, .purple],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+            }
+            .frame(width: 38, height: 38)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
             VStack(alignment: .leading, spacing: 2) {
                 Text("StemSplitter")
                     .font(.title3.bold())
