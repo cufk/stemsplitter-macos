@@ -5,6 +5,7 @@ import StemSplitterCore
 
 struct ContentView: View {
     @ObservedObject var viewModel: AppViewModel
+    @ObservedObject var playback: PlaybackEngine
     @State private var isTargeted = false
     @State private var scrubbing = false
     @State private var scrubValue: Double = 0
@@ -154,81 +155,73 @@ struct ContentView: View {
             ForEach(viewModel.stems) { track in
                 StemRowView(
                     track: track,
-                    progress: viewModel.playback.duration > 0
-                        ? viewModel.playback.position / viewModel.playback.duration
+                    progress: playback.duration > 0
+                        ? playback.position / playback.duration
                         : 0
                 ) { kind, volume, muted in
                     viewModel.setVolume(kind, volume: volume, muted: muted)
                 }
             }
-            transport
-            exportSection
             Spacer()
+            exportSection
+            transportCard
         }
     }
 
     private var displayedPosition: Double {
-        scrubbing ? scrubValue : viewModel.playback.position
+        scrubbing ? scrubValue : playback.position
     }
 
-    private var transport: some View {
-        HStack(spacing: 18) {
-            Button {
-                viewModel.playback.togglePlay()
-            } label: {
-                Image(systemName: viewModel.playback.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 42))
-                    .foregroundStyle(.tint)
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut(" ", modifiers: [])
-            .help(viewModel.playback.isPlaying ? "Paus (mellanslag)" : "Spela (mellanslag)")
-
-            Button {
-                viewModel.playback.stop()
-            } label: {
-                Image(systemName: "stop.circle.fill")
-                    .font(.system(size: 30))
+    private var transportCard: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                Text(TimeFormat.format(displayedPosition))
+                    .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Stoppa")
-
-            Button {
-                viewModel.playback.isLooping.toggle()
-            } label: {
-                Image(systemName: viewModel.playback.isLooping ? "repeat.circle.fill" : "repeat.circle")
-                    .font(.system(size: 26))
-                    .foregroundStyle(viewModel.playback.isLooping ? Color.accentColor : Color.secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Loopa låten (bra vid övning)")
-
-            Spacer()
-
-            Text(TimeFormat.format(displayedPosition))
-                .font(.subheadline.monospacedDigit())
-                .foregroundStyle(.secondary)
-            Slider(
-                value: $scrubValue,
-                in: 0...max(viewModel.playback.duration, 0.001),
-                onEditingChanged: { editing in
-                    if editing {
-                        scrubbing = true
-                    } else {
-                        viewModel.playback.seek(to: scrubValue)
-                        scrubbing = false
+                Slider(
+                    value: $scrubValue,
+                    in: 0...max(playback.duration, 0.001),
+                    onEditingChanged: { editing in
+                        if editing {
+                            scrubbing = true
+                        } else {
+                            playback.seek(to: scrubValue)
+                            scrubbing = false
+                        }
+                    }
+                )
+                .onChange(of: playback.position) { _, newValue in
+                    if !scrubbing {
+                        scrubValue = newValue
                     }
                 }
-            )
-            .onChange(of: viewModel.playback.position) { _, newValue in
-                if !scrubbing {
-                    scrubValue = newValue
+                Text(TimeFormat.format(playback.duration))
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Button {
+                    playback.isLooping.toggle()
+                } label: {
+                    Image(systemName: playback.isLooping ? "repeat.circle.fill" : "repeat.circle")
+                        .font(.system(size: 22))
+                        .foregroundStyle(playback.isLooping ? Color.accentColor : Color.secondary)
                 }
+                .buttonStyle(.plain)
+                .help("Loopa låten (bra vid övning)")
             }
-            Text(TimeFormat.format(viewModel.playback.duration))
-                .font(.subheadline.monospacedDigit())
-                .foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button {
+                    playback.togglePlay()
+                } label: {
+                    Image(systemName: playback.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 52))
+                        .foregroundStyle(.tint)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(" ", modifiers: [])
+                .help(playback.isPlaying ? "Paus (mellanslag)" : "Spela (mellanslag)")
+                Spacer()
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

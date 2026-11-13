@@ -6,7 +6,7 @@ struct StemSplitterApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(viewModel: viewModel)
+            ContentView(viewModel: viewModel, playback: viewModel.playback)
                 .frame(minWidth: 760, minHeight: 540)
         }
     }
