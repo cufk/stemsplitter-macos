@@ -17,7 +17,8 @@ let package = Package(
             dependencies: ["StemSplitterCore"],
             path: "Sources/StemSplitter",
             resources: [
-                .process("Resources/bootstrap.sh")
+                .process("Resources/bootstrap.sh"),
+                .process("Resources/appicon.jpg")
             ]
         ),
         .testTarget(
