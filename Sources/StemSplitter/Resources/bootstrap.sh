@@ -21,4 +21,4 @@ PIP="$VENV_DIR/bin/pip"
 "$PIP" install --index-url https://download.pytorch.org/whl/cpu "torch==2.5.1"
 "$PIP" install "demucs==4.0.1"
 
-"$VENV_DIR/bin/demucs" --version
+"$VENV_DIR/bin/python" -c "import demucs; print('demucs', demucs.__version__)"
