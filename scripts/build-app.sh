@@ -44,5 +44,13 @@ fi
 # Ta bort quarantine om filen kommer fran nedladdning/overforing
 xattr -cr "$APP" 2>/dev/null || true
 
-echo "==> Klart: $APP"
-echo "    Starta med: open \"$APP\"  (forsta gangen: hogerklicka → Oppna om Gatekeeper klagar)"
+# Skapa DMG for enkel delning (innehaller hela .app)
+echo "==> Skapar StemSplitter.dmg"
+DMG="$ROOT/build/StemSplitter.dmg"
+rm -f "$DMG"
+hdiutil create -volname StemSplitter -srcfolder "$APP" -ov -format UDZO "$DMG" >/dev/null
+
+echo "==> Klart:"
+echo "    $APP"
+echo "    $DMG"
+echo "    Starta lokalt med: open \"$APP\"  (forsta gangen: hogerklicka → Oppna om Gatekeeper klagar)"

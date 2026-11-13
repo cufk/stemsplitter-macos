@@ -69,6 +69,8 @@ Efter Xcode-installationen: `swift run` startar appen, `swift test` kör testern
 open build/StemSplitter.app
 ```
 
+Skriptet gor aven `build/StemSplitter.dmg` (fardig att skicka till vänner). Mottagaren dubbelklickar dmg:n, drar appen till Program, och forsta gangen hogerklick → Oppna (eller `xattr -dr com.apple.quarantine /Applications/StemSplitter.app`).
+
 Skriptet kor `swift build -c release` och paketerar binären + `Packaging/Info.plist` + SPM-resursbunten (bootstrap.sh) till `build/StemSplitter.app`, ad-hoc-signar den och verifierar signaturen.
 
 Om Gatekeeper ändå blockerar (t.ex. efter att appen kopierats/nedladdats, `spctl --assess` säger "rejected"):
