@@ -4,3 +4,12 @@
 xcuserdata/
 *.xcuserstate
 .DS_Store
+
+# Python (dev-agent)
+__pycache__/
+*.pyc
+.venv/
+.env
+.pytest_cache/
+*.egg-info/
+dist/

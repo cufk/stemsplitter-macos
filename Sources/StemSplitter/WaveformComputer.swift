@@ -7,10 +7,11 @@ enum WaveformComputer {
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4096)
         guard let buffer else { return [] }
         var buckets = [Float](repeating: 0, count: bucketCount)
-        let total = max(1, file.length)
+        let total: AVAudioFramePosition = AVAudioFramePosition(max(1, file.length))
 
         while file.framePosition < total {
-            let read = (try? file.read(into: buffer, frameCount: 4096)) ?? 0
+            try? file.read(into: buffer, frameCount: 4096)
+            let read = buffer.frameLength
             if read == 0 { break }
             guard let data = buffer.floatChannelData else { break }
             let base = file.framePosition - AVAudioFramePosition(read)

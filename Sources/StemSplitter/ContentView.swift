@@ -5,6 +5,7 @@ import StemSplitterCore
 
 struct ContentView: View {
     @ObservedObject var viewModel: AppViewModel
+    @ObservedObject var playback: PlaybackEngine
     @State private var isTargeted = false
     @State private var scrubbing = false
     @State private var scrubValue: Double = 0
@@ -12,19 +13,21 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
             Divider()
-            if case .busy = viewModel.phase {
-                busyView
-            } else if case .ready = viewModel.phase {
-                readyView
-            } else if case .failed(let message) = viewModel.phase {
-                errorView(message)
-            } else {
-                idleView
-            }
+            content
+                .padding(20)
         }
-        .padding(16)
-        .background(isTargeted ? Color.accentColor.opacity(0.08) : Color.clear)
+        .background(isTargeted ? Color.accentColor.opacity(0.06) : Color.clear)
+        .alert("Python 3.9+ saknas", isPresented: $viewModel.showPythonInstallPrompt) {
+            Button("Ladda ner och installera") {
+                viewModel.installPython()
+            }
+            Button("Avbryt", role: .cancel) {}
+        } message: {
+            Text("StemSplitter behöver Python 3.9+ för att köra AI-separationen lokalt. Vill du ladda ner den officiella Python 3.12-installationen från python.org (ca 45 MB)? Du installerar paketet själv i Installer och startar sedan om appen.")
+        }
         .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
             guard let provider = providers.first else { return false }
             provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { item, _ in
@@ -44,35 +47,87 @@ struct ContentView: View {
     }
 
     private var header: some View {
-        HStack {
-            Image(systemName: "waveform")
-                .font(.title2)
-                .foregroundStyle(.tint)
-            Text("StemSplitter")
-                .font(.title2.bold())
+        HStack(spacing: 12) {
+            Group {
+                if let iconURL = Bundle.module.url(forResource: "appicon", withExtension: "jpg"),
+                   let nsImage = NSImage(contentsOf: iconURL) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Image(systemName: "waveform")
+                        .font(.title2.bold())
+                        .foregroundStyle(.white)
+                        .background(
+                            LinearGradient(
+                                colors: [.pink, .purple],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+            }
+            .frame(width: 38, height: 38)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("StemSplitter")
+                    .font(.title3.bold())
+                if let inputURL = viewModel.inputURL {
+                    Text(inputURL.lastPathComponent)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
             Spacer()
-            if let inputURL = viewModel.inputURL {
-                Text(inputURL.lastPathComponent)
+            if case .ready = viewModel.phase {
+                Text(viewModel.statusMessage)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+            }
+            if case .ready = viewModel.phase {
+                Button {
+                    viewModel.exportMix()
+                } label: {
+                    Label("Exportera mix", systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isExporting)
             }
             Button("Öppna ljudfil…") {
                 viewModel.openFileDialog()
             }
+            .buttonStyle(.borderedProminent)
             .keyboardShortcut("o", modifiers: .command)
         }
     }
 
+    private var content: some View {
+        Group {
+            if case .busy = viewModel.phase {
+                busyView
+            } else if case .ready = viewModel.phase {
+                readyView
+            } else if case .failed(let message) = viewModel.phase {
+                errorView(message)
+            } else {
+                idleView
+            }
+        }
+    }
+
     private var idleView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             Spacer()
-            Image(systemName: "music.note.list")
-                .font(.system(size: 48))
+            Image(systemName: "waveform.circle.fill")
+                .font(.system(size: 64))
                 .foregroundStyle(.secondary)
-            Text("Dra en lokal ljudfil hit, eller öppna en med knappen ovanför.")
+            Text("Dra en lokal ljudfil hit, eller öppna en med knappen ovanför")
+                .font(.title3)
                 .multilineTextAlignment(.center)
             Text("Filen delas upp lokalt i sång, trummor, bas och övrigt — ingen musik lämnar din Mac.")
-                .font(.footnote)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Spacer()
@@ -80,36 +135,43 @@ struct ContentView: View {
     }
 
     private var busyView: some View {
-        VStack(spacing: 16) {
+        VStack {
             Spacer()
-            ProgressView(value: viewModel.progressFraction ?? 0) {
-                Text(viewModel.statusMessage)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-            }
-            if viewModel.progressFraction == nil {
-                ProgressView()
+            VStack(spacing: 12) {
+                if let fraction = viewModel.progressFraction {
+                    ProgressView(value: fraction)
+                        .progressViewStyle(.linear)
+                        .frame(width: 320)
+                    Text("\(Int(fraction * 100)) %")
+                        .font(.title3.bold().monospacedDigit())
+                } else {
+                    ProgressView()
+                        .controlSize(.large)
+                }
             }
             Spacer()
         }
     }
 
     private func errorView(_ message: String) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             Spacer()
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 40))
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 44))
                 .foregroundStyle(.yellow)
             Text("Något gick fel")
-                .font(.headline)
+                .font(.title3.bold())
             Text(message)
-                .multilineTextAlignment(.center)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 480)
             Button("Försök igen") {
                 if let url = viewModel.inputURL {
                     Task { await viewModel.load(url) }
                 }
             }
+            .buttonStyle(.borderedProminent)
             Spacer()
         }
     }
@@ -119,104 +181,135 @@ struct ContentView: View {
             ForEach(viewModel.stems) { track in
                 StemRowView(
                     track: track,
-                    progress: viewModel.playback.duration > 0
-                        ? viewModel.playback.position / viewModel.playback.duration
+                    progress: playback.duration > 0
+                        ? playback.position / playback.duration
                         : 0
                 ) { kind, volume, muted in
                     viewModel.setVolume(kind, volume: volume, muted: muted)
                 }
-                Divider()
             }
-            transport
-            exportSection
             Spacer()
+            tuningCard
+            exportSection
+            transportCard
         }
     }
 
-    private var displayedPosition: Double {
-        scrubbing ? scrubValue : viewModel.playback.position
+    private var tuningCard: some View {
+        HStack(spacing: 28) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Tonläge (pitch)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Slider(value: $playback.pitchSemitones, in: -12...12, step: 1)
+                        .frame(width: 160)
+                    Text("\(Int(playback.pitchSemitones)) st")
+                        .font(.caption.monospacedDigit())
+                        .frame(width: 44, alignment: .trailing)
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Tempo")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Slider(value: $playback.tempo, in: 0.5...2.0, step: 0.05)
+                        .frame(width: 160)
+                    Text(String(format: "%.2f×", playback.tempo))
+                        .font(.caption.monospacedDigit())
+                        .frame(width: 44, alignment: .trailing)
+                }
+            }
+            Spacer()
+            Button("Återställ") {
+                playback.resetTuning()
+            }
+            .buttonStyle(.bordered)
+            .help("Tonläge 0 st och tempo 1.00×")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
     }
 
-    private var transport: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 16) {
-                Button {
-                    viewModel.playback.togglePlay()
-                } label: {
-                    Image(systemName: viewModel.playback.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 36))
-                }
-                .buttonStyle(.plain)
-                .help(viewModel.playback.isPlaying ? "Paus" : "Spela")
+    private var displayedPosition: Double {
+        scrubbing ? scrubValue : playback.position
+    }
 
-                Button {
-                    viewModel.playback.stop()
-                } label: {
-                    Image(systemName: "stop.circle")
-                        .font(.system(size: 28))
-                }
-                .buttonStyle(.plain)
-                .help("Stoppa")
-
-                Button {
-                    viewModel.playback.isLooping.toggle()
-                } label: {
-                    Image(systemName: viewModel.playback.isLooping ? "repeat.circle.fill" : "repeat.circle")
-                        .font(.system(size: 24))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(viewModel.playback.isLooping ? .tint : .primary)
-                .help("Loopa låten (bra vid övning)")
-
-                Spacer()
-
+    private var transportCard: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
                 Text(TimeFormat.format(displayedPosition))
-                    .font(.caption.monospacedDigit())
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
                 Slider(
                     value: $scrubValue,
-                    in: 0...max(viewModel.playback.duration, 0.001),
+                    in: 0...max(playback.duration, 0.001),
                     onEditingChanged: { editing in
                         if editing {
                             scrubbing = true
                         } else {
-                            viewModel.playback.seek(to: scrubValue)
+                            playback.seek(to: scrubValue)
                             scrubbing = false
                         }
                     }
                 )
-                .onChange(of: viewModel.playback.position) { _, newValue in
+                .onChange(of: playback.position) { _, newValue in
                     if !scrubbing {
                         scrubValue = newValue
                     }
                 }
-                Text(TimeFormat.format(viewModel.playback.duration))
-                    .font(.caption.monospacedDigit())
+                Text(TimeFormat.format(playback.duration))
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Button {
+                    playback.isLooping.toggle()
+                } label: {
+                    Image(systemName: playback.isLooping ? "repeat.circle.fill" : "repeat.circle")
+                        .font(.system(size: 22))
+                        .foregroundStyle(playback.isLooping ? Color.accentColor : Color.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Loopa låten (bra vid övning)")
+            }
+            HStack {
+                Spacer()
+                Button {
+                    playback.togglePlay()
+                } label: {
+                    Image(systemName: playback.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 52))
+                        .foregroundStyle(.tint)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(" ", modifiers: [])
+                .help(playback.isPlaying ? "Paus (mellanslag)" : "Spela (mellanslag)")
+                Spacer()
             }
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
     }
 
     private var exportSection: some View {
-        VStack(spacing: 6) {
-            HStack {
-                Button("Exportera mix…") {
-                    viewModel.exportMix()
-                }
-                .disabled(viewModel.isExporting || viewModel.stems.isEmpty)
-                if viewModel.isExporting {
-                    ProgressView(value: viewModel.exportProgress)
-                        .frame(width: 160)
-                    Text("\(Int(viewModel.exportProgress * 100)) %")
-                        .font(.caption)
-                }
-                if let exportedURL = viewModel.exportedURL {
-                    Text("Sparad: \(exportedURL.lastPathComponent)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
+        HStack(spacing: 12) {
+            if viewModel.isExporting {
+                ProgressView(value: viewModel.exportProgress)
+                    .frame(width: 140)
+                Text("Exporterar… \(Int(viewModel.exportProgress * 100)) %")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
             }
-            Text("Exporten använder de volymer och mutes du ställt in just nu, och sparas som en WAV-fil.")
-                .font(.footnote)
+            if let exportedURL = viewModel.exportedURL {
+                Label("Sparad: \(exportedURL.lastPathComponent)", systemImage: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
+            Spacer()
+            Text("Exporten använder de volymer och mutes du ställt in just nu (WAV).")
+                .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }

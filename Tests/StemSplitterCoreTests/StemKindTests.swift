@@ -1,29 +1,29 @@
-import XCTest
+import Testing
 @testable import StemSplitterCore
 
-final class StemKindTests: XCTestCase {
-    func testParsesKnownStemFileNames() {
-        XCTAssertEqual(StemKind(fileName: "vocals.wav"), .vocals)
-        XCTAssertEqual(StemKind(fileName: "drums.wav"), .drums)
-        XCTAssertEqual(StemKind(fileName: "bass.wav"), .bass)
-        XCTAssertEqual(StemKind(fileName: "other.wav"), .other)
+struct StemKindTests {
+    @Test func parsesKnownStemFileNames() {
+        #expect(StemKind(fileName: "vocals.wav") == .vocals)
+        #expect(StemKind(fileName: "drums.wav") == .drums)
+        #expect(StemKind(fileName: "bass.wav") == .bass)
+        #expect(StemKind(fileName: "other.wav") == .other)
     }
 
-    func testIsCaseInsensitiveAndIgnoresExtension() {
-        XCTAssertEqual(StemKind(fileName: "Vocals.WAV"), .vocals)
-        XCTAssertEqual(StemKind(fileName: "OTHER.mp3"), .other)
+    @Test func isCaseInsensitiveAndIgnoresExtension() {
+        #expect(StemKind(fileName: "Vocals.WAV") == .vocals)
+        #expect(StemKind(fileName: "OTHER.mp3") == .other)
     }
 
-    func testRejectsUnknownNames() {
-        XCTAssertNil(StemKind(fileName: "no_vocals.wav"))
-        XCTAssertNil(StemKind(fileName: "README.md"))
-        XCTAssertNil(StemKind(fileName: "vocals2.wav"))
+    @Test func rejectsUnknownNames() {
+        #expect(StemKind(fileName: "no_vocals.wav") == nil)
+        #expect(StemKind(fileName: "README.md") == nil)
+        #expect(StemKind(fileName: "vocals2.wav") == nil)
     }
 
-    func testDisplayNames() {
-        XCTAssertEqual(StemKind.vocals.displayName, "Sång")
-        XCTAssertEqual(StemKind.drums.displayName, "Trummor")
-        XCTAssertEqual(StemKind.bass.displayName, "Bas")
-        XCTAssertEqual(StemKind.other.displayName, "Övrigt")
+    @Test func displayNames() {
+        #expect(StemKind.vocals.displayName == "Sång")
+        #expect(StemKind.drums.displayName == "Trummor")
+        #expect(StemKind.bass.displayName == "Bas")
+        #expect(StemKind.other.displayName == "Övrigt")
     }
 }

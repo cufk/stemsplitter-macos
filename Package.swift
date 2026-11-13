@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "StemSplitter",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v14)],
     products: [
         .executable(name: "StemSplitter", targets: ["StemSplitter"])
     ],
@@ -17,7 +17,8 @@ let package = Package(
             dependencies: ["StemSplitterCore"],
             path: "Sources/StemSplitter",
             resources: [
-                .process("Resources/bootstrap.sh")
+                .process("Resources/bootstrap.sh"),
+                .process("Resources/appicon.jpg")
             ]
         ),
         .testTarget(

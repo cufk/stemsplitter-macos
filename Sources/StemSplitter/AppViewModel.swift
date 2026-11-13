@@ -21,6 +21,7 @@ final class AppViewModel: ObservableObject {
     @Published var isExporting = false
     @Published var exportProgress: Double = 0
     @Published var exportedURL: URL?
+    @Published var showPythonInstallPrompt = false
 
     let playback = PlaybackEngine()
     private let separator = SeparationService()
@@ -42,11 +43,28 @@ final class AppViewModel: ObservableObject {
             phase = .failed("Filformatet stöds inte: .\(input.pathExtension)")
             return
         }
+        inputURL = input
+        stems = []
+
+        guard await ensurePythonOrPrompt() else { return }
+
+        // Cache: samma fil (path+storlek+datum) med alla fyra stems -> ladda direkt
+        let key = cacheKey(for: input)
+        let projectDir = SeparationService.appSupportRoot
+            .appendingPathComponent("projects/\(key)", isDirectory: true)
+        let cachedURLs = StemKind.allCases.compactMap { kind -> URL? in
+            let url = projectDir.appendingPathComponent("\(kind.rawValue).wav")
+            return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        }
+        if cachedURLs.count == StemKind.allCases.count {
+            let tracks = StemKind.allCases.map { StemTrack(kind: $0, url: projectDir.appendingPathComponent("\($0.rawValue).wav")) }
+            await finishLoad(tracks: tracks, input: input, cached: true)
+            return
+        }
+
         phase = .busy
         statusMessage = "Förbereder lokal AI-miljö (första körningen kan ta några minuter)…"
         progressFraction = nil
-        stems = []
-        inputURL = input
         do {
             let located = try await separator.separate(input: input) { message, fraction in
                 Task { @MainActor in
@@ -54,8 +72,6 @@ final class AppViewModel: ObservableObject {
                     if let fraction { self.progressFraction = fraction }
                 }
             }
-            let projectDir = SeparationService.appSupportRoot
-                .appendingPathComponent("projects/\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
             var tracks: [StemTrack] = []
             for kind in StemKind.allCases {
@@ -67,14 +83,75 @@ final class AppViewModel: ObservableObject {
             guard !tracks.isEmpty else {
                 throw SeparationService.SeparationError.noStemsFound
             }
+            await finishLoad(tracks: tracks, input: input, cached: false)
+        } catch {
+            phase = .failed(error.localizedDescription)
+        }
+    }
+
+    private func ensurePythonOrPrompt() async -> Bool {
+        if await PythonLocator.find() != nil {
+            return true
+        }
+        await MainActor.run {
+            showPythonInstallPrompt = true
+        }
+        return false
+    }
+
+    func installPython() {
+        showPythonInstallPrompt = false
+        Task {
+            await MainActor.run {
+                phase = .busy
+                statusMessage = "Laddar ner Python 3.12 från python.org…"
+                progressFraction = 0
+            }
+            do {
+                let pkg = try await PythonInstaller.download { fraction in
+                    Task { @MainActor in
+                        self.progressFraction = fraction
+                        self.statusMessage = "Laddar ner Python 3.12… \(Int(fraction * 100)) %"
+                    }
+                }
+                PythonInstaller.openInstaller(at: pkg)
+                await MainActor.run {
+                    phase = .idle
+                    statusMessage = "Installera paketet i Installer (ange lösenord), starta sedan om StemSplitter."
+                }
+            } catch {
+                await MainActor.run {
+                    phase = .failed("Kunde inte ladda ner Python: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    private func finishLoad(tracks: [StemTrack], input: URL, cached: Bool) async {
+        do {
             try playback.load(tracks)
             stems = tracks
             await computeWaveforms(for: tracks)
             phase = .ready
-            statusMessage = "Klart: \(input.lastPathComponent)"
+            statusMessage = cached ? "Klart (cachad): \(input.lastPathComponent)" : "Klart: \(input.lastPathComponent)"
         } catch {
             phase = .failed(error.localizedDescription)
         }
+    }
+
+    private func cacheKey(for url: URL) -> String {
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+        let size = values?.fileSize ?? 0
+        let modified = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
+        return fnv1a("\(url.path)|\(size)|\(modified)")
+    }
+
+    private func fnv1a(_ string: String) -> String {
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in string.utf8 {
+            hash = (hash ^ UInt64(byte)) &* 0x100000001b3
+        }
+        return String(format: "%016llx", hash)
     }
 
     private func computeWaveforms(for tracks: [StemTrack]) async {
@@ -115,7 +192,12 @@ final class AppViewModel: ObservableObject {
         exportProgress = 0
         exportedURL = nil
         do {
-            try await MixerExporter.exportMix(stems: stems, to: url) { progress in
+            try await MixerExporter.exportMix(
+                stems: stems,
+                to: url,
+                pitchSemitones: playback.pitchSemitones,
+                tempo: playback.tempo
+            ) { progress in
                 Task { @MainActor in self.exportProgress = progress }
             }
             exportedURL = url
