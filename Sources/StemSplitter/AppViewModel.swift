@@ -269,8 +269,8 @@ final class AppViewModel: ObservableObject {
         exportedURL = nil
         exportTask = Task {
             do {
-                try await MixerExporter.exportMix(stems: inputs, to: url, pitchSemitones: pitch, tempo: tempo) { [weak self] value in
-                    Task { @MainActor in self?.exportProgress = value }
+                try await MixerExporter.exportMix(stems: inputs, to: url, pitchSemitones: pitch, tempo: tempo) { value in
+                    Task { @MainActor in self.exportProgress = value }
                 }
                 exportedURL = url
             } catch is CancellationError {
@@ -335,9 +335,9 @@ final class AppViewModel: ObservableObject {
             self.statusMessage = "Laddar ner Python 3.12 från python.org…"
             self.progressFraction = 0
             do {
-                let package = try await PythonInstaller.download { [weak self] fraction in
+                let package = try await PythonInstaller.download { fraction in
                     Task { @MainActor in
-                        guard let self, self.isCurrent(id) else { return }
+                        guard self.isCurrent(id) else { return }
                         self.progressFraction = fraction
                         self.statusMessage = "Laddar ner Python 3.12… \(Int(fraction * 100)) %"
                     }

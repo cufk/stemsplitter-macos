@@ -17,6 +17,12 @@ enum MixerExporter {
 
     private static let chunkFrames: AVAudioFrameCount = 8192
 
+    /// Synkron hjälpfunktion: i en async-kontext föreslår kompilatorn async-varianten av
+    /// scheduleFile, men den väntar tills filen spelats klart och skulle låsa exporten.
+    private static func schedule(_ file: AVAudioFile, on player: AVAudioPlayerNode) {
+        player.scheduleFile(file, at: nil, completionHandler: nil)
+    }
+
     /// Renderar mixen offline genom samma kedja som uppspelningen:
     /// spelare (volym) → stem-mixer → tonhöjd/tempo → utdata. Klipps till [-1, 1].
     /// Tar bort den halvfärdiga filen om exporten avbryts eller misslyckas.
@@ -59,9 +65,7 @@ enum MixerExporter {
 
         try engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: chunkFrames)
         for source in sources {
-            // Explicit completionHandler: nil — utan den väljer kompilatorn async-varianten,
-            // som väntar tills filen spelats klart och därmed låser exporten.
-            source.player.scheduleFile(source.file, at: nil, completionHandler: nil)
+            schedule(source.file, on: source.player)
         }
         try engine.start()
         defer { engine.stop() }
