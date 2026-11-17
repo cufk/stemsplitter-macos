@@ -86,7 +86,10 @@ Forsta gangen kan du också behöva högerklicka på appen → **Öppna** (eller
 
 ## CI och dev-agent
 
-- `.github/workflows/ci.yml` kör `swift build` + `swift test` på en `macos-14`-runner vid push/PR.
+- `.github/workflows/ci.yml` körs vid push till alla brancher: `swift build`, `swift test`, bygger `.app`/`.dmg` med röktest, sammanfattar kompilatorvarningar och laddar upp `StemSplitter.dmg` som artifact. Dev-agentens Python-tester körs i ett eget jobb.
+- `./scripts/verify.sh [--app]` kör samma kontroller lokalt på en Mac.
+- `scripts/ci-wait.sh [sha]` väntar på CI för en commit och skriver ut felen om den blir röd.
+- Arbetsflödet för utveckling beskrivs i `CLAUDE.md`.
 - `dev-agent/` innehåller ett Mistral Workflow (`dev-agent`) som bevakar CI för branchen, hämtar fel-loggar vid röda körningar, låter en LLM föreslå en fix (unified diff), pushar den med `[dev-agent]`-markör och loopar tills CI är grön. Se `dev-agent/README.md` för driftsättning (kräver workspace-secret `github_token`).
 
 ## Arkitektur

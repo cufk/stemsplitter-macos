@@ -2,19 +2,81 @@ name: CI
 
 on:
   push:
-    branches: [main]
-  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.event.pull_request.head.sha || github.sha }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
+  swift:
+    name: Swift build + test + app
     runs-on: macos-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Swift build
-        run: swift build
+
+      - name: Toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Swift build (debug)
+        run: |
+          set -o pipefail
+          swift build 2>&1 | tee build.log
+
       - name: Swift test
         run: swift test
+
+      - name: Bygg .app + .dmg (release)
+        run: ./scripts/build-app.sh
+
+      - name: Röktest av app-bunten
+        run: |
+          APP=build/StemSplitter.app
+          test -x "$APP/Contents/MacOS/StemSplitter"
+          test -f "$APP/Contents/Info.plist"
+          test -f "$APP/Contents/Resources/AppIcon.icns"
+          ls "$APP/Contents/Resources/"*.bundle >/dev/null
+          find "$APP/Contents/Resources" -name bootstrap.sh | grep -q .
+          plutil -lint "$APP/Contents/Info.plist"
+          codesign --verify --deep --strict "$APP"
+          echo "App-bunten ser komplett ut"
+
+      - name: Sammanfattning av kompilatorvarningar
+        if: always()
+        run: |
+          [ -f build.log ] || exit 0
+          W=$(grep -E ': warning: ' build.log | sort -u)
+          N=$(printf '%s' "$W" | grep -c . || true)
+          {
+            echo "### Kompilatorvarningar: $N"
+            if [ "$N" -gt 0 ]; then echo '```'; echo "$W" | head -50; echo '```'; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "$W" | head -50 | while IFS= read -r l; do
+            [ -n "$l" ] && echo "::warning::$l"
+          done
+
+      - name: Ladda upp StemSplitter.dmg
+        uses: actions/upload-artifact@v4
+        with:
+          name: StemSplitter-${{ github.sha }}
+          path: build/StemSplitter.dmg
+          retention-days: 14
+          if-no-files-found: error
+
+  dev-agent:
+    name: dev-agent (Python-tester)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Enhetstester
+        working-directory: dev-agent
+        run: python -m unittest discover -s tests -v
