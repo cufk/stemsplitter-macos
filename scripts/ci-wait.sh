@@ -24,9 +24,11 @@ while :; do
         read -r status conclusion url < <(gh api "repos/$REPO/actions/runs/$run_id" \
             --jq '"\(.status) \(.conclusion // "-") \(.html_url)"')
         [ "$status" = "completed" ] && break
-        echo "    $status …"
+        [ "$status" != "${last:-}" ] && echo "    $status …"
+        last="$status"
     else
-        echo "    ingen körning ännu …"
+        [ -z "${announced:-}" ] && echo "    ingen körning ännu …"
+        announced=1
     fi
     if [ $(( $(date +%s) - start )) -gt "$TIMEOUT" ]; then
         echo "==> Timeout efter ${TIMEOUT}s"; exit 2
@@ -41,10 +43,13 @@ gh api "repos/$REPO/actions/runs/$run_id/jobs" \
 [ "$conclusion" = "success" ] && exit 0
 
 gh api "repos/$REPO/actions/runs/$run_id/jobs" \
-    --jq '.jobs[] | select(.conclusion=="failure") | "\(.id)\t\(.name)\t" + ([.steps[] | select(.conclusion=="failure") | .name] | join(", "))' |
-while IFS=$'\t' read -r job_id job_name steps; do
+    --jq '.jobs[] | select(.conclusion!="success" and .conclusion!="skipped") | "\(.id)\t\(.name)\t\(.conclusion)\t" + ([.steps[] | select(.conclusion=="failure") | .name] | join(", "))' |
+while IFS=$'\t' read -r job_id job_name job_conclusion steps; do
     echo
-    echo "==> Jobb '$job_name' föll på steg: $steps"
+    echo "==> Jobb '$job_name' ($job_conclusion) föll på steg: ${steps:-–}"
+    # Infrastrukturfel (t.ex. ingen ledig runner) syns bara som annotationer
+    gh api "repos/$REPO/check-runs/$job_id/annotations" \
+        --jq '.[] | select(.annotation_level=="failure") | "    [annotation] \(.message)"' 2>/dev/null || true
     log=$(gh api "repos/$REPO/actions/jobs/$job_id/logs" 2>/dev/null | sed -E 's/^[0-9T:.-]+Z //')
     errs=$(printf '%s\n' "$log" | grep -E '(: error: |error: |✘|FAIL|Traceback|AssertionError|##\[error\])' | sort -u | head -40)
     if [ -n "$errs" ]; then

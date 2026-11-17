@@ -29,6 +29,8 @@ Se README.md för funktioner och arkitektur. Skriv commit-meddelanden, kommentar
 - `dev-agent` (ubuntu): `python -m unittest discover -s tests` i `dev-agent/`.
 
 ## Kända fallgropar
+- macOS-runners kan saknas hos GitHub ("job was not acquired by Runner", jobbet blir `cancelled`).
+  Det är inte ett kodfel — kör om: `gh api -X POST repos/cufk/stemsplitter-macos/actions/runs/<id>/rerun-failed-jobs`.
 - macOS-SDK:t på runnern ändras: API:er kan bli `async` (t.ex. `scheduleFile`). Bygg aldrig mot antaganden — läs CI-felet.
 - Tester kräver hela Xcode, inte bara Command Line Tools.
 - Ändra inte `dev-agent/` utan att köra dess tester; den pushar commits märkta `[dev-agent]`.
