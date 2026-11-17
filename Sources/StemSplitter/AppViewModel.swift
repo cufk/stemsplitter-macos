@@ -17,6 +17,10 @@ final class AppViewModel: ObservableObject {
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var statusMessage = ""
     @Published private(set) var progressFraction: Double?
+    /// Aktuellt steg och alla steg för den pågående bearbetningen.
+    @Published private(set) var stage: WorkStage = .reading
+    @Published private(set) var stages: [WorkStage] = []
+    @Published private(set) var workStartedAt: Date?
     @Published private(set) var stems: [StemTrack] = []
     /// Om någon stem är solo — då dimmas övriga i gränssnittet.
     @Published private(set) var anySoloed = false
@@ -80,6 +84,7 @@ final class AppViewModel: ObservableObject {
     }
 
     func cancelWork() {
+        if loadTask != nil { log("Avbryter pågående arbete") }
         loadTask?.cancel()
         loadTask = nil
         loadID += 1
@@ -103,17 +108,27 @@ final class AppViewModel: ObservableObject {
         id == loadID && !Task.isCancelled
     }
 
+    private func setStage(_ newStage: WorkStage, _ message: String, progress: Double? = nil) {
+        if newStage != stage { log("Steg: \(newStage.title)") }
+        stage = newStage
+        statusMessage = message
+        progressFraction = progress
+    }
+
     private func load(_ input: URL, id: Int) async {
+        log("Öppnar \(input.path)")
         guard AudioFileSupport.isSupported(input) else {
+            log("Filformatet stöds inte: \(input.pathExtension)")
             phase = .failed("Filformatet stöds inte: .\(input.pathExtension)")
             return
         }
         lastInputURL = input
         resetPlayer()
         title = input.deletingPathExtension().lastPathComponent
+        stages = WorkStage.stages(for: input.pathExtension)
+        workStartedAt = Date()
+        setStage(.reading, "Läser filen…")
         phase = .working
-        statusMessage = "Läser filen…"
-        progressFraction = nil
 
         let key: String
         do {
@@ -121,40 +136,62 @@ final class AppViewModel: ObservableObject {
                 try CacheKey.fingerprint(of: input)
             }.value
         } catch {
+            log("Kunde inte läsa filen: \(error)")
             if isCurrent(id) { phase = .failed("Kunde inte läsa filen: \(error.localizedDescription)") }
             return
         }
         guard isCurrent(id) else { return }
+        log("Cache-nyckel \(key)")
 
         if ProjectStore.stemURLs(key: key) != nil {
+            log("Finns redan i biblioteket — öppnar direkt")
             await openProject(key: key, id: id)
             return
         }
 
-        guard await PythonLocator.find() != nil else {
+        setStage(.preparing, "Letar efter Python…")
+        guard let python = await PythonLocator.find() else {
+            log("Ingen Python 3.9–3.12 hittades")
             guard isCurrent(id) else { return }
             phase = .idle
             showPythonInstallPrompt = true
             return
         }
+        log("Python: \(python.path) (\(python.major).\(python.minor))")
         guard isCurrent(id) else { return }
-        statusMessage = "Förbereder lokal AI-miljö…"
+        setStage(.preparing, "Startar AI-miljön…")
 
         do {
-            let result = try await separator.separate(input: input) { [weak self] message, fraction in
+            let result = try await separator.separate(input: input) { [weak self] event in
                 Task { @MainActor in
                     guard let self, self.isCurrent(id) else { return }
-                    self.statusMessage = message
-                    if let fraction { self.progressFraction = fraction }
+                    switch event {
+                    case .preparing(let message):
+                        self.setStage(.preparing, message)
+                    case .converting(let fraction):
+                        self.setStage(.converting, "Konverterar till WAV så att Demucs kan läsa filen…", progress: fraction)
+                    case .separating(let fraction, let onGPU):
+                        let message = "Delar upp i sång, trummor, bas och övrigt på \(onGPU ? "GPU" : "CPU")…"
+                        self.setStage(.separating, message, progress: fraction ?? (self.stage == .separating ? self.progressFraction : nil))
+                    case .retryingOnCPU:
+                        self.setStage(.separating, "GPU:n klarade inte låten — kör om på CPU (tar längre tid)…", progress: nil)
+                    }
                 }
             }
             defer { try? FileManager.default.removeItem(at: result.workDirectory) }
             guard isCurrent(id) else { return }
+            setStage(.saving, "Sparar stems…")
             try ProjectStore.save(key: key, sourceName: input.lastPathComponent, model: result.model, stems: result.stems)
+            log("Sparat som projekt \(key)")
             refreshLibrary()
             await openProject(key: key, id: id)
         } catch {
-            guard isCurrent(id), !(error is CancellationError) else { return }
+            if error is CancellationError {
+                log("Avbrutet")
+                return
+            }
+            log("Fel: \(error.localizedDescription)")
+            guard isCurrent(id) else { return }
             phase = .failed(error.localizedDescription)
         }
     }
@@ -177,6 +214,8 @@ final class AppViewModel: ObservableObject {
         stems = tracks
         observeTracks()
         currentProjectKey = key
+        workStartedAt = nil
+        log("Öppnade projekt \(key) med \(tracks.count) stems")
         title = meta?.displayName ?? title ?? "Okänd låt"
         statusMessage = ""
         progressFraction = nil
@@ -218,6 +257,7 @@ final class AppViewModel: ObservableObject {
         if let analyzed {
             playback.beatGrid = analyzed
             ProjectStore.saveBeatGrid(key: key, grid: analyzed)
+            log(analyzed.map { "Tempo: \(String(format: "%.1f", $0.bpm)) BPM, \($0.beats.count) slag" } ?? "Inget tydligt tempo hittades")
         }
     }
 
@@ -356,6 +396,7 @@ final class AppViewModel: ObservableObject {
             } catch is CancellationError {
                 // Avbruten av användaren — den halvfärdiga filen är redan borttagen.
             } catch {
+                log("Exporten misslyckades: \(error)")
                 alertMessage = "Exporten misslyckades: \(error.localizedDescription)"
             }
             isExporting = false
@@ -402,6 +443,10 @@ final class AppViewModel: ObservableObject {
         refreshLibrary()
     }
 
+    func revealLog() {
+        AppLog.shared.reveal()
+    }
+
     func revealAppSupport() {
         NSWorkspace.shared.activateFileViewerSelecting([SeparationService.appSupportRoot])
     }
@@ -411,9 +456,10 @@ final class AppViewModel: ObservableObject {
     func installPython() {
         showPythonInstallPrompt = false
         startLoad { id in
+            self.stages = [.preparing]
+            self.workStartedAt = Date()
+            self.setStage(.preparing, "Laddar ner Python 3.12 från python.org…", progress: 0)
             self.phase = .working
-            self.statusMessage = "Laddar ner Python 3.12 från python.org…"
-            self.progressFraction = 0
             do {
                 let package = try await PythonInstaller.download { fraction in
                     Task { @MainActor in

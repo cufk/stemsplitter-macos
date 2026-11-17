@@ -48,3 +48,19 @@ struct AudioConverterTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).isEmpty)
     }
 }
+
+struct AudioConverterProgressTests {
+    @Test func reportsIncreasingProgressUpToOne() throws {
+        let dir = try TestAudio.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let input = dir.appendingPathComponent("lat.m4a")
+        try TestAudio.writeSine(to: input, sampleRate: 48000, channels: 2, seconds: 3, aac: true)
+
+        var values: [Double] = []
+        _ = try AudioConverter.wavCopy(of: input, in: dir) { values.append($0) }
+
+        #expect(values.count > 3)
+        #expect(values == values.sorted())
+        #expect(values.last == 1)
+    }
+}

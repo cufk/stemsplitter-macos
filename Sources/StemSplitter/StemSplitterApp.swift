@@ -3,7 +3,13 @@ import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "utveckling"
+        log("StemSplitter \(version) startad (macOS \(ProcessInfo.processInfo.operatingSystemVersionString))")
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        log("StemSplitter avslutas")
         // Avsluta Demucs/pip om de körs, så att inget fortsätter i bakgrunden.
         ProcessRegistry.shared.terminateAll()
     }
@@ -84,6 +90,9 @@ struct StemSplitterApp: App {
                     .disabled(!viewModel.isReady)
                 Button("Återställ mixen") { viewModel.resetMix() }
                     .disabled(!viewModel.isReady)
+            }
+            CommandGroup(replacing: .help) {
+                Button("Visa logg") { viewModel.revealLog() }
             }
             CommandMenu("Tempo") {
                 Button("Halvera tempot") { viewModel.halveTempo() }

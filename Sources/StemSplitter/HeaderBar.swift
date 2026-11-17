@@ -52,6 +52,8 @@ struct HeaderBar: View {
                     .disabled(!viewModel.isReady)
                 Button("Återställ tempo och tonläge") { playback.resetTuning() }
                     .disabled(!viewModel.isReady)
+                Divider()
+                Button("Visa logg") { viewModel.revealLog() }
             } label: {
                 CircleIconLabel(systemName: "ellipsis")
             }

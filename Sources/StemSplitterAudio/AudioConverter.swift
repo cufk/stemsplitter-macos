@@ -16,7 +16,7 @@ public enum AudioConverter {
     /// Konverterar en ljudfil till en temporär 44,1 kHz stereo float32-WAV
     /// (demucs/torchaudio kan inte alltid läsa t.ex. MP3 utan ffmpeg).
     /// Hanterar andra samplingsfrekvenser (t.ex. 48 kHz) och mono. Anroparen äger och tar bort filen.
-    public static func wavCopy(of input: URL, in directory: URL) throws -> URL {
+    public static func wavCopy(of input: URL, in directory: URL, progress: ((Double) -> Void)? = nil) throws -> URL {
         let source: AVAudioFile
         do {
             source = try AVAudioFile(forReading: input)
@@ -82,6 +82,9 @@ public enum AudioConverter {
                 }
                 if outputBuffer.frameLength > 0 {
                     try destinationFile.write(from: outputBuffer)
+                }
+                if let progress, source.length > 0 {
+                    progress(min(1, Double(source.framePosition) / Double(source.length)))
                 }
                 if status == .endOfStream || (status == .inputRanDry && reachedEnd) {
                     break

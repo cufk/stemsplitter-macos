@@ -47,12 +47,16 @@ struct ContentView: View {
         case .working:
             WorkingView(
                 title: viewModel.title,
+                stages: viewModel.stages,
+                stage: viewModel.stage,
                 status: viewModel.statusMessage,
                 progress: viewModel.progressFraction,
-                onCancel: viewModel.cancelWork
+                startedAt: viewModel.workStartedAt,
+                onCancel: viewModel.cancelWork,
+                onShowLog: viewModel.revealLog
             )
         case .failed(let message):
-            FailureView(message: message, onRetry: viewModel.retry, onOpen: viewModel.openFileDialog)
+            FailureView(message: message, onRetry: viewModel.retry, onOpen: viewModel.openFileDialog, onShowLog: viewModel.revealLog)
         case .ready:
             PlayerScreen(viewModel: viewModel, isTargeted: isTargeted)
         }

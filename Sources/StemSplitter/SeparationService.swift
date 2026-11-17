@@ -26,6 +26,14 @@ final class SeparationService: @unchecked Sendable {
         }
     }
 
+    /// Förlopp under separeringen.
+    enum Progress: Sendable {
+        case preparing(String)
+        case converting(Double)
+        case separating(Double?, onGPU: Bool)
+        case retryingOnCPU
+    }
+
     struct Result {
         /// Arbetskatalog som anroparen ska ta bort när stems har flyttats.
         let workDirectory: URL
@@ -71,9 +79,9 @@ final class SeparationService: @unchecked Sendable {
     func separate(
         input: URL,
         model: String = "htdemucs",
-        progress: @escaping @Sendable (String, Double?) -> Void
+        progress: @escaping @Sendable (Progress) -> Void
     ) async throws -> Result {
-        try await ensureEnvironment { message in progress(message, nil) }
+        try await ensureEnvironment { message in progress(.preparing(message)) }
 
         let fileManager = FileManager.default
         let workDirectory = Self.appSupportRoot.appendingPathComponent("\(Self.workPrefix)\(UUID().uuidString)", isDirectory: true)
@@ -85,10 +93,15 @@ final class SeparationService: @unchecked Sendable {
             if input.pathExtension.lowercased() == "wav" {
                 demucsInput = input
             } else {
-                progress("Konverterar till WAV…", nil)
+                progress(.converting(0))
+                log("Konverterar \(input.lastPathComponent) till WAV")
                 demucsInput = try await Task.detached(priority: .userInitiated) {
-                    try AudioConverter.wavCopy(of: input, in: workDirectory)
+                    let throttle = LockedThrottle()
+                    return try AudioConverter.wavCopy(of: input, in: workDirectory) { value in
+                        if throttle.accept(value) { progress(.converting(value)) }
+                    }
                 }.value
+                log("Konvertering klar")
             }
             let outputDirectory = workDirectory.appendingPathComponent("out", isDirectory: true)
 
@@ -99,7 +112,8 @@ final class SeparationService: @unchecked Sendable {
                 throw CancellationError()
             } catch where device == "mps" {
                 // MPS kan sakna stöd för vissa operationer i htdemucs — kör om på CPU
-                progress("GPU (MPS) fungerade inte — kör om på CPU…", nil)
+                log("Demucs på GPU (MPS) misslyckades — kör om på CPU")
+                progress(.retryingOnCPU)
                 try? fileManager.removeItem(at: outputDirectory)
                 try? "cpu".write(to: deviceFile, atomically: true, encoding: .utf8)
                 try await runDemucs(model: model, device: "cpu", input: demucsInput, output: outputDirectory, progress: progress)
@@ -107,6 +121,7 @@ final class SeparationService: @unchecked Sendable {
 
             let located = try StemLocator.locate(in: outputDirectory)
             guard StemKind.allCases.allSatisfy({ located[$0] != nil }) else {
+                log("Demucs gav bara: \(located.keys.map(\.rawValue).sorted())")
                 throw SeparationError.noStemsFound
             }
             return Result(workDirectory: workDirectory, stems: located, model: model)
@@ -121,17 +136,29 @@ final class SeparationService: @unchecked Sendable {
         device: String,
         input: URL,
         output: URL,
-        progress: @escaping @Sendable (String, Double?) -> Void
+        progress: @escaping @Sendable (Progress) -> Void
     ) async throws {
-        progress("Separerar stems med \(model) på \(device == "mps" ? "GPU" : "CPU")…", nil)
+        let onGPU = device == "mps"
+        progress(.separating(nil, onGPU: onGPU))
+        log("Startar demucs -n \(model) -d \(device) \(input.lastPathComponent)")
+        let throttle = LockedThrottle()
         do {
             try await ProcessRunner.run(
                 executable: demucsURL,
                 arguments: ["-n", model, "-d", device, "-o", output.path, input.path],
                 environment: Self.environment,
-                onLine: { line in progress(line, ProgressParser.fraction(fromLine: line)) }
+                onLine: { line in
+                    if let fraction = ProgressParser.fraction(fromLine: line) {
+                        if throttle.accept(fraction) { progress(.separating(fraction, onGPU: onGPU)) }
+                        if throttle.shouldLog(fraction) { log("demucs \(Int(fraction * 100)) %") }
+                    } else {
+                        log("demucs: \(line)")
+                    }
+                }
             )
+            log("Demucs klar")
         } catch let failure as ProcessRunner.Failure {
+            log("Demucs avslutades med exitkod \(failure.status):\n\(failure.tail)")
             throw SeparationError.demucsFailed(failure.status, failure.tail)
         }
     }
@@ -148,6 +175,7 @@ final class SeparationService: @unchecked Sendable {
             environment: Self.environment
         )
         let detected = lines?.last.flatMap { ["mps", "cpu"].contains($0) ? $0 : nil } ?? "cpu"
+        log("Beräkningsenhet: \(detected)")
         try? detected.write(to: deviceFile, atomically: true, encoding: .utf8)
         return detected
     }
@@ -164,18 +192,45 @@ final class SeparationService: @unchecked Sendable {
         guard let script = Bundle.module.url(forResource: "bootstrap", withExtension: "sh") else {
             throw SeparationError.bootstrapMissing
         }
-        progress("Skapar lokal Python-miljö och installerar Demucs (kan ta flera minuter första gången)…")
+        progress("Installerar Demucs i en lokal Python-miljö (flera minuter första gången)…")
+        log("Installerar Demucs med \(python.path) (\(python.major).\(python.minor))")
         do {
             try await ProcessRunner.run(
                 executable: URL(fileURLWithPath: "/bin/sh"),
                 arguments: [script.path, Self.venvURL.path],
                 environment: Self.environment.merging(["PYTHON_BIN": python.path]) { _, new in new },
-                onLine: progress
+                onLine: { line in
+                    if !line.contains("%|") && !line.contains("MB/s") { log("bootstrap: \(line)") }
+                    progress(line)
+                }
             )
+            log("Demucs installerat")
         } catch let failure as ProcessRunner.Failure {
+            log("Installationen misslyckades (exitkod \(failure.status)):\n\(failure.tail)")
             throw SeparationError.bootstrapFailed(failure.status, failure.tail)
         }
         try? fileManager.removeItem(at: deviceFile)
         fileManager.createFile(atPath: installMarker.path, contents: Data(Date().description.utf8))
+    }
+}
+
+/// Trådsäker strypning av förloppet från processens utdata (anropas från en bakgrundskö).
+private final class LockedThrottle: @unchecked Sendable {
+    private let lock = NSLock()
+    private var ui = ProgressThrottle(step: 0.01)
+    private var lastLogged = -1
+
+    func accept(_ value: Double) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return ui.accept(value)
+    }
+
+    /// Loggar var tionde procent.
+    func shouldLog(_ value: Double) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        let decile = Int(value * 10)
+        guard decile != lastLogged else { return false }
+        lastLogged = decile
+        return true
     }
 }
