@@ -28,4 +28,34 @@ public enum MixMath {
     public static func cents(fromSemitones semitones: Double) -> Float {
         Float(min(max(semitones, -24), 24) * 100)
     }
+
+    /// Det som blir kvar av mixen när de givna stems dras bort: `out = mix − Σ stems`.
+    /// Används för att låta "Övrigt" innehålla allt som inte är sång, trummor eller bas,
+    /// så att summan av alla stems blir exakt originalet.
+    public static func residual(
+        mix: UnsafePointer<Float>,
+        subtracting stems: [UnsafePointer<Float>],
+        into output: UnsafeMutablePointer<Float>,
+        count: Int
+    ) {
+        guard count > 0 else { return }
+        for i in 0..<count {
+            var value = mix[i]
+            for stem in stems {
+                value -= stem[i]
+            }
+            output[i] = value
+        }
+    }
+
+    /// Nivåskillnad i dB mellan två energier (t.ex. hur mycket som saknades).
+    public static func decibels(energy: Double, reference: Double) -> Double {
+        guard energy > 0, reference > 0 else { return -.infinity }
+        return 10 * log10(energy / reference)
+    }
+
+    /// Om tempo och tonläge är neutrala kan tidsenheten kopplas förbi (ingen bearbetning av ljudet).
+    public static func isNeutralTuning(tempo: Double, semitones: Double) -> Bool {
+        abs(tempo - 1) < 0.0001 && abs(semitones) < 0.0001
+    }
 }

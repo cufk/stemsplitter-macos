@@ -22,12 +22,12 @@ final class PlaybackEngine: ObservableObject {
 
     /// Tonläge i halvtoner (-12...+12). Ändrar inte tempo.
     @Published var pitchSemitones: Double = 0 {
-        didSet { timePitch.pitch = MixMath.cents(fromSemitones: pitchSemitones) }
+        didSet { applyTuning() }
     }
 
     /// Tempo som multipel (0.5...2.0). Ändrar inte tonläge.
     @Published var tempo: Double = 1.0 {
-        didSet { timePitch.rate = Float(tempo) }
+        didSet { applyTuning() }
     }
 
     /// Tempo och slag för klicket och taktlinjalen.
@@ -100,8 +100,7 @@ final class PlaybackEngine: ObservableObject {
         connectClick()
         engine.connect(stemMixer, to: timePitch, format: busFormat)
         engine.connect(timePitch, to: engine.mainMixerNode, format: busFormat)
-        timePitch.pitch = MixMath.cents(fromSemitones: pitchSemitones)
-        timePitch.rate = Float(tempo)
+        applyTuning()
         referenceKind = longest?.kind
         duration = longest?.length ?? 0
         playhead.position = 0
@@ -127,6 +126,14 @@ final class PlaybackEngine: ObservableObject {
 
     func setGain(_ kind: StemKind, _ gain: Float) {
         players[kind]?.volume = gain
+    }
+
+    /// Tempo/tonläge till tidsenheten. Vid 100 % och 0 halvtoner kopplas den förbi,
+    /// så att ljudet passerar helt obearbetat (enheten mjukar annars upp transienter och diskant).
+    private func applyTuning() {
+        timePitch.pitch = MixMath.cents(fromSemitones: pitchSemitones)
+        timePitch.rate = Float(tempo)
+        timePitch.bypass = MixMath.isNeutralTuning(tempo: tempo, semitones: pitchSemitones)
     }
 
     func resetTuning() {

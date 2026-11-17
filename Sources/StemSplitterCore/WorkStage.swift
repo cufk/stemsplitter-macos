@@ -12,17 +12,15 @@ public enum WorkStage: Int, CaseIterable, Sendable, Comparable {
         switch self {
         case .reading: return "Läser filen"
         case .preparing: return "Förbereder AI-miljön"
-        case .converting: return "Konverterar till WAV"
+        case .converting: return "Förbereder ljudfilen"
         case .separating: return "Delar upp i stems"
         case .saving: return "Sparar"
         }
     }
 
-    /// Steg som visas för en fil; WAV behöver ingen konvertering.
-    public static func stages(for fileExtension: String) -> [WorkStage] {
-        let needsConversion = fileExtension.lowercased() != "wav"
-        return allCases.filter { $0 != .converting || needsConversion }
-    }
+    /// Alla filer (även WAV) görs om till 44,1 kHz stereo först, så att stems och original
+    /// blir exakt lika långa och "Övrigt" kan räknas fram som originalet minus övriga stems.
+    public static var all: [WorkStage] { allCases }
 
     public static func < (lhs: WorkStage, rhs: WorkStage) -> Bool {
         lhs.rawValue < rhs.rawValue

@@ -68,4 +68,33 @@ struct MixerExporterTests {
 
         #expect(try TestAudio.channelPeaks(output).allSatisfy { $0 < 0.001 })
     }
+
+    // Regression: ljudet gick genom tidsenheten även vid 100 % tempo och 0 halvtoner,
+    // vilket mjukade upp ljudbilden. Nu ska en neutral export vara exakt summan av stems.
+    @Test(.timeLimit(.minutes(1)))
+    func neutralExportIsExactSumOfStems() async throws {
+        let dir = try TestAudio.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let urls = try makeStems(in: dir, amplitude: 0.3)
+        let output = dir.appendingPathComponent("mix.wav")
+
+        try await MixerExporter.exportMix(
+            stems: urls.map { MixerExporter.StemInput(url: $0, gain: 1) },
+            to: output, pitchSemitones: 0, tempo: 1
+        ) { _ in }
+
+        let mix = try samples(of: output)
+        let parts = try urls.map(samples(of:))
+        #expect(mix.count == parts[0].count)
+        for i in stride(from: 0, to: mix.count, by: 101) {
+            #expect(abs(mix[i] - (parts[0][i] + parts[1][i])) < 1e-4)
+        }
+    }
+
+    private func samples(of url: URL) throws -> [Float] {
+        let file = try AVAudioFile(forReading: url)
+        let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length))!
+        try file.read(into: buffer)
+        return Array(UnsafeBufferPointer(start: buffer.floatChannelData![0], count: Int(buffer.frameLength)))
+    }
 }

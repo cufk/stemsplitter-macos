@@ -19,6 +19,10 @@ struct HeaderBar: View {
                 LibraryPopover(viewModel: viewModel) { showLibrary = false }
             }
 
+            CircleIconButton(systemName: "plus", help: "Öppna ljudfil (⌘O)") {
+                viewModel.openFileDialog()
+            }
+
             Spacer()
 
             VStack(spacing: 3) {
@@ -48,6 +52,8 @@ struct HeaderBar: View {
                 }
                 .disabled(!viewModel.isReady || playback.beatGrid == nil)
                 Divider()
+                Button("Separera om låten…") { viewModel.reseparateCurrent() }
+                    .disabled(!viewModel.isReady)
                 Button("Återställ mixen") { viewModel.resetMix() }
                     .disabled(!viewModel.isReady)
                 Button("Återställ tempo och tonläge") { playback.resetTuning() }
@@ -70,7 +76,11 @@ struct HeaderBar: View {
         case .idle: return "Lokal stem-separering"
         case .working: return "Arbetar…"
         case .failed: return "Något gick fel"
-        case .ready: return viewModel.tempoDescription
+        case .ready:
+            if let model = viewModel.currentModelTitle {
+                return "\(viewModel.tempoDescription) · \(model)"
+            }
+            return viewModel.tempoDescription
         }
     }
 }

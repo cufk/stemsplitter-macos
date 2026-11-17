@@ -125,7 +125,7 @@ final class AppViewModel: ObservableObject {
         lastInputURL = input
         resetPlayer()
         title = input.deletingPathExtension().lastPathComponent
-        stages = WorkStage.stages(for: input.pathExtension)
+        stages = WorkStage.all
         workStartedAt = Date()
         setStage(.reading, "Läser filen…")
         phase = .working
@@ -162,7 +162,9 @@ final class AppViewModel: ObservableObject {
         setStage(.preparing, "Startar AI-miljön…")
 
         do {
-            let result = try await separator.separate(input: input) { [weak self] event in
+            let model = SeparationModel.from(defaultsValue: UserDefaults.standard.string(forKey: SeparationModel.defaultsKey))
+            log("Modell: \(model.rawValue)")
+            let result = try await separator.separate(input: input, model: model.rawValue) { [weak self] event in
                 Task { @MainActor in
                     guard let self, self.isCurrent(id) else { return }
                     switch event {
@@ -181,7 +183,7 @@ final class AppViewModel: ObservableObject {
             defer { try? FileManager.default.removeItem(at: result.workDirectory) }
             guard isCurrent(id) else { return }
             setStage(.saving, "Sparar stems…")
-            try ProjectStore.save(key: key, sourceName: input.lastPathComponent, model: result.model, stems: result.stems)
+            try ProjectStore.save(key: key, source: input, model: result.model, stems: result.stems)
             log("Sparat som projekt \(key)")
             refreshLibrary()
             await openProject(key: key, id: id)
@@ -441,6 +443,25 @@ final class AppViewModel: ObservableObject {
         phase = .idle
         ProjectStore.clearAll()
         refreshLibrary()
+    }
+
+    /// Separerar den öppna låten igen (t.ex. med bästa kvalitet), från originalfilen.
+    func reseparateCurrent() {
+        guard let key = currentProjectKey else { return }
+        let source = ProjectStore.meta(key: key)?.sourcePath.map(URL.init(fileURLWithPath:)) ?? lastInputURL
+        guard let source, FileManager.default.fileExists(atPath: source.path) else {
+            alertMessage = "Originalfilen hittades inte. Dra in låten igen för att separera om den."
+            return
+        }
+        log("Separerar om \(source.lastPathComponent)")
+        ProjectStore.delete(key: key)
+        refreshLibrary()
+        open(source)
+    }
+
+    var currentModelTitle: String? {
+        guard let key = currentProjectKey, let model = ProjectStore.meta(key: key)?.model else { return nil }
+        return SeparationModel(rawValue: model)?.title
     }
 
     func revealLog() {

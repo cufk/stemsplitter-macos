@@ -11,13 +11,23 @@ public struct ProjectMeta: Codable, Equatable, Sendable {
     public var peaks: [String: [Float]]
     /// Tempo och slag (saknas i projekt från äldre versioner).
     public var beatGrid: BeatGrid?
+    /// Sökväg till originalfilen när låten separerades (för att kunna separera om).
+    public var sourcePath: String?
 
-    public init(sourceName: String, createdAt: Date, model: String, peaks: [String: [Float]] = [:], beatGrid: BeatGrid? = nil) {
+    public init(
+        sourceName: String,
+        createdAt: Date,
+        model: String,
+        peaks: [String: [Float]] = [:],
+        beatGrid: BeatGrid? = nil,
+        sourcePath: String? = nil
+    ) {
         self.sourceName = sourceName
         self.createdAt = createdAt
         self.model = model
         self.peaks = peaks
         self.beatGrid = beatGrid
+        self.sourcePath = sourcePath
     }
 
     public var displayName: String {

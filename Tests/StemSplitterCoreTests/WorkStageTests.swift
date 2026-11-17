@@ -2,9 +2,8 @@ import Testing
 @testable import StemSplitterCore
 
 struct WorkStageTests {
-    @Test func wavSkipsConversion() {
-        #expect(WorkStage.stages(for: "WAV") == [.reading, .preparing, .separating, .saving])
-        #expect(WorkStage.stages(for: "mp3") == [.reading, .preparing, .converting, .separating, .saving])
+    @Test func allStagesInOrder() {
+        #expect(WorkStage.all == [.reading, .preparing, .converting, .separating, .saving])
     }
 
     @Test func stagesAreOrdered() {
@@ -17,5 +16,13 @@ struct WorkStageTests {
         // #expect kan inte anropa mutating-metoder — samla resultaten först
         let accepted = [0, 0.05, 0.12, 0.2, 1].map { throttle.accept($0) }
         #expect(accepted == [true, false, true, false, true])
+    }
+}
+
+struct SeparationModelTests {
+    @Test func unknownOrMissingValueGivesStandard() {
+        #expect(SeparationModel.from(defaultsValue: nil) == .standard)
+        #expect(SeparationModel.from(defaultsValue: "okänd") == .standard)
+        #expect(SeparationModel.from(defaultsValue: "htdemucs_ft") == .best)
     }
 }

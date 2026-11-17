@@ -20,12 +20,13 @@ final class StemTrack: ObservableObject, Identifiable {
 }
 
 extension StemKind {
+    /// Egen färg per stem — samma i ljust och mörkt läge, mättad nog för vågformer.
     var color: Color {
         switch self {
-        case .vocals: return .pink
-        case .drums: return .orange
-        case .bass: return .purple
-        case .other: return .teal
+        case .vocals: return Color(red: 0.93, green: 0.33, blue: 0.16)   // orange (appens accent)
+        case .drums: return Color(red: 0.96, green: 0.65, blue: 0.14)    // gul-orange
+        case .bass: return Color(red: 0.55, green: 0.42, blue: 0.95)     // violett
+        case .other: return Color(red: 0.16, green: 0.68, blue: 0.62)    // grön-turkos
         }
     }
 

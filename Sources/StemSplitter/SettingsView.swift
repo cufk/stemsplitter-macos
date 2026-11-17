@@ -1,11 +1,26 @@
 import SwiftUI
+import StemSplitterCore
 
 struct SettingsView: View {
     @ObservedObject var viewModel: AppViewModel
     @State private var confirmClear = false
+    @AppStorage(SeparationModel.defaultsKey) private var model = SeparationModel.standard.rawValue
 
     var body: some View {
         Form {
+            Section("Separering") {
+                Picker("Kvalitet", selection: $model) {
+                    ForEach(SeparationModel.allCases) { option in
+                        Text(option.title).tag(option.rawValue)
+                    }
+                }
+                Text(SeparationModel.from(defaultsValue: model).detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Gäller nya låtar. Välj \"Separera om låten\" i menyn … för att göra om en låt.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("Bibliotek och cache") {
                 LabeledContent("Sparade låtar", value: "\(viewModel.library.count)")
                 LabeledContent("Använt utrymme") {

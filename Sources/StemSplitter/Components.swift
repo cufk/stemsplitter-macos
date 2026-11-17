@@ -35,16 +35,16 @@ struct CircleIconLabel: View {
     }
 }
 
-/// Brett reglage i form av ett piller: etikett till vänster, värde till höger,
-/// fylld del och ett handtag som visar positionen. Dra eller klicka för att ändra.
-struct PillSlider: View {
-    let title: String
+/// Smalt reglage: tunn bana, fylld del i given färg och en liten knopp. Dra eller klicka.
+struct MiniSlider: View {
     @Binding var value: Double
     let range: ClosedRange<Double>
+    var tint: Color = Theme.accent
     var step: Double?
     var defaultValue: Double?
-    var isDisabled = false
-    let format: (Double) -> String
+    var accessibilityTitle: String
+    var format: (Double) -> String = { "\(Int(($0 * 100).rounded())) %" }
+    @Environment(\.isEnabled) var isEnabled
 
     var body: some View {
         GeometryReader { geometry in
@@ -52,44 +52,32 @@ struct PillSlider: View {
             let fraction = CGFloat((value - range.lowerBound) / (range.upperBound - range.lowerBound))
             let x = width * min(max(fraction, 0), 1)
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                Capsule().fill(Theme.fill).frame(height: 4)
+                Capsule().fill(isEnabled ? tint : Theme.secondaryInk).frame(width: max(4, x), height: 4)
+                Circle()
                     .fill(Theme.card)
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Theme.subtle)
-                    .frame(width: max(x, 0))
-                Capsule()
-                    .fill(Theme.fill)
-                    .frame(width: 2, height: 20)
-                    .offset(x: max(0, min(width - 2, x - 1)))
-                HStack {
-                    Text(title)
-                        .foregroundStyle(Theme.ink)
-                    Spacer()
-                    Text(format(value))
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.secondaryInk)
-                }
-                .font(.callout)
-                .padding(.horizontal, 14)
+                    .overlay(Circle().strokeBorder(isEnabled ? tint : Theme.secondaryInk, lineWidth: 2))
+                    .frame(width: 12, height: 12)
+                    .shadow(color: Theme.shadow, radius: 2, y: 1)
+                    .offset(x: min(max(0, x - 6), width - 12))
             }
+            .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0).onChanged { drag in
-                    guard !isDisabled, width > 0 else { return }
+                    guard isEnabled, width > 0 else { return }
                     update(fraction: drag.location.x / width)
                 }
             )
         }
-        .frame(height: 42)
-        .shadow(color: Theme.shadow, radius: 6, y: 2)
-        .opacity(isDisabled ? 0.45 : 1)
+        .frame(height: 16)
         .contextMenu {
             if let defaultValue {
                 Button("Återställ") { value = defaultValue }
             }
         }
         .accessibilityElement()
-        .accessibilityLabel(title)
+        .accessibilityLabel(accessibilityTitle)
         .accessibilityValue(format(value))
         .accessibilityAdjustableAction { direction in
             let increment = step ?? (range.upperBound - range.lowerBound) / 20
@@ -108,6 +96,46 @@ struct PillSlider: View {
             newValue = (newValue / step).rounded() * step
         }
         value = min(max(newValue, range.lowerBound), range.upperBound)
+    }
+}
+
+/// Kompakt knapp med rubrik och värde ("TEMPO 98 BPM") som öppnar en liten panel.
+struct ValueChip<Panel: View>: View {
+    let title: String
+    let value: String
+    var isHighlighted = false
+    var help: String = ""
+    @ViewBuilder let panel: () -> Panel
+    @State private var isPresented = false
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title.uppercased())
+                    .font(.system(size: 9, weight: .semibold))
+                    .tracking(0.6)
+                    .foregroundStyle(isHighlighted ? Theme.accent : Theme.secondaryInk)
+                Text(value)
+                    .font(.callout.weight(.medium).monospacedDigit())
+                    .foregroundStyle(Theme.ink)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isHighlighted ? Theme.soloLane.opacity(0.6) : Theme.subtle)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .popover(isPresented: $isPresented, arrowEdge: .top) {
+            panel()
+                .padding(16)
+                .frame(width: 260)
+        }
     }
 }
 
@@ -134,28 +162,5 @@ struct ToggleChip: View {
         .buttonStyle(.plain)
         .help(help)
         .accessibilityAddTraits(isOn ? .isSelected : [])
-    }
-}
-
-/// Bred knapp med kontur i pillerform ("+ Add Track" i förlagan).
-struct OutlinePillButton: View {
-    let title: String
-    let systemImage: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.callout)
-                .foregroundStyle(Theme.ink)
-                .frame(maxWidth: .infinity)
-                .frame(height: 40)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Theme.fill, lineWidth: 1)
-                )
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 }

@@ -68,26 +68,15 @@ private struct PlayerScreen: View {
     let isTargeted: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 20) {
-                    TimelineView(viewModel: viewModel, playback: viewModel.playback)
-                    OutlinePillButton(title: "Öppna en annan låt", systemImage: "plus") {
-                        viewModel.openFileDialog()
-                    }
-                    MixerPanel(viewModel: viewModel, playback: viewModel.playback)
-                }
-                .padding(.horizontal, 28)
-                .padding(.top, 8)
-                .padding(.bottom, 20)
-            }
-            VStack(spacing: 10) {
-                ExportStatus(viewModel: viewModel)
-                TransportPill(playback: viewModel.playback)
-            }
-            .padding(.horizontal, 28)
-            .padding(.bottom, 24)
+        VStack(spacing: 16) {
+            TimelineView(viewModel: viewModel, playback: viewModel.playback)
+                .frame(maxHeight: .infinity)
+            ExportStatus(viewModel: viewModel)
+            TransportPill(viewModel: viewModel, playback: viewModel.playback)
         }
+        .padding(.horizontal, 28)
+        .padding(.top, 4)
+        .padding(.bottom, 24)
         .overlay {
             if isTargeted {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)

@@ -49,7 +49,7 @@ enum ProjectStore {
 
     /// Flyttar stems till ett nytt projekt. Atomiskt: projektet syns först när allt är på plats,
     /// så ett avbrutet försök lämnar aldrig ett halvfärdigt projekt efter sig.
-    static func save(key: String, sourceName: String, model: String, stems: [StemKind: URL]) throws {
+    static func save(key: String, source: URL, model: String, stems: [StemKind: URL]) throws {
         let fileManager = FileManager.default
         guard StemKind.allCases.allSatisfy({ stems[$0] != nil }) else { throw StoreError.incomplete }
         let staging = root.appendingPathComponent("\(stagingPrefix)\(UUID().uuidString)", isDirectory: true)
@@ -58,7 +58,7 @@ enum ProjectStore {
             for (kind, url) in stems {
                 try fileManager.moveItem(at: url, to: staging.appendingPathComponent("\(kind.rawValue).wav"))
             }
-            let meta = ProjectMeta(sourceName: sourceName, createdAt: Date(), model: model)
+            let meta = ProjectMeta(sourceName: source.lastPathComponent, createdAt: Date(), model: model, sourcePath: source.path)
             try meta.encoded().write(to: staging.appendingPathComponent(ProjectMeta.fileName), options: .atomic)
             let destination = directory(for: key)
             if fileManager.fileExists(atPath: destination.path) {

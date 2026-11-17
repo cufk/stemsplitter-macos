@@ -88,21 +88,17 @@ final class SeparationService: @unchecked Sendable {
         try fileManager.createDirectory(at: workDirectory, withIntermediateDirectories: true)
 
         do {
-            // demucs/torchaudio saknar ofta ffmpeg/mp3-stöd — konvertera till WAV först (utom om redan WAV)
-            let demucsInput: URL
-            if input.pathExtension.lowercased() == "wav" {
-                demucsInput = input
-            } else {
-                progress(.converting(0))
-                log("Konverterar \(input.lastPathComponent) till WAV")
-                demucsInput = try await Task.detached(priority: .userInitiated) {
-                    let throttle = LockedThrottle()
-                    return try AudioConverter.wavCopy(of: input, in: workDirectory) { value in
-                        if throttle.accept(value) { progress(.converting(value)) }
-                    }
-                }.value
-                log("Konvertering klar")
-            }
+            // Alltid till 44,1 kHz stereo-WAV: demucs/torchaudio saknar ofta mp3-stöd, och stems
+            // blir då exakt lika långa som mixen så att "Övrigt" kan räknas fram nedan.
+            progress(.converting(0))
+            log("Gör om \(input.lastPathComponent) till 44,1 kHz stereo-WAV")
+            let demucsInput = try await Task.detached(priority: .userInitiated) {
+                let throttle = LockedThrottle()
+                return try AudioConverter.wavCopy(of: input, in: workDirectory) { value in
+                    if throttle.accept(value) { progress(.converting(value)) }
+                }
+            }.value
+            log("Ljudfilen förberedd")
             let outputDirectory = workDirectory.appendingPathComponent("out", isDirectory: true)
 
             let device = await detectDevice()
@@ -120,9 +116,22 @@ final class SeparationService: @unchecked Sendable {
             }
 
             let located = try StemLocator.locate(in: outputDirectory)
-            guard StemKind.allCases.allSatisfy({ located[$0] != nil }) else {
+            guard let vocals = located[.vocals], let drums = located[.drums],
+                  let bass = located[.bass], let other = located[.other] else {
                 log("Demucs gav bara: \(located.keys.map(\.rawValue).sorted())")
                 throw SeparationError.noStemsFound
+            }
+
+            // "Övrigt" = originalet minus sång, trummor och bas. Då försvinner inget av ljudbilden:
+            // det som Demucs inte placerade i någon stem hamnar här.
+            do {
+                let report = try await Task.detached(priority: .userInitiated) {
+                    try StemResidual.rebuild(target: other, mix: demucsInput, subtract: [vocals, drums, bass])
+                }.value
+                log(String(format: "Övrigt kompletterat — det som saknades låg på %.1f dB relativt originalet", report.missingLevel))
+            } catch {
+                // Inte kritiskt: Demucs egen "övrigt" används
+                log("Kunde inte komplettera Övrigt: \(error.localizedDescription)")
             }
             return Result(workDirectory: workDirectory, stems: located, model: model)
         } catch {
@@ -145,7 +154,9 @@ final class SeparationService: @unchecked Sendable {
         do {
             try await ProcessRunner.run(
                 executable: demucsURL,
-                arguments: ["-n", model, "-d", device, "-o", output.path, input.path],
+                // --float32: ingen avrundning till 16 bitar och ingen omskalning av stems som klipper
+                // (omskalning skulle ändra balansen mellan stems så att summan inte blir originalet)
+                arguments: ["-n", model, "-d", device, "--float32", "-o", output.path, input.path],
                 environment: Self.environment,
                 onLine: { line in
                     if let fraction = ProgressParser.fraction(fromLine: line) {

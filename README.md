@@ -12,8 +12,10 @@ All bearbetning sker **100 % lokalt på din Mac**. Ingen ljudfil skickas någons
 - Stem-separering lokalt med [Demucs](https://github.com/facebookresearch/demucs) (`htdemucs`: sång / trummor / bas / övrigt), på GPU (MPS) när det går — kan avbrytas
 - **Tempoanalys**: BPM, varje slag och taktettor hittas i trumspåret; taktlinjal ovanför spåren
 - **Klick** i takt med låten (⌘K) — följer med när tempot ändras, ettan har ett ljusare klick. Halvera/dubbla tempot eller flytta ettan om analysen missar
-- Spår för varje stem under en gemensam tidslinje med spelhuvud; klicka för att hoppa
-- **Volym, mute och solo** per stem, **tempo** (0,5–2×, visas i BPM) och **tonläge** (±12 halvtoner) oberoende av varandra
+- Färgade spår för varje stem under en gemensam tidslinje med spelhuvud; klicka för att hoppa
+- **Volym, mute och solo** direkt i varje spår; **tempo** (0,5–2×, visas i BPM), **tonläge** (±12 halvtoner) och **klick** i transportfältet
+- **Inget av ljudbilden försvinner**: "Övrigt" räknas fram som originalet minus sång, trummor och bas, så alla stems tillsammans blir exakt originalet. Vid 100 % tempo och 0 halvtoner passerar ljudet helt obearbetat
+- Kvalitetsval i Inställningar: Snabb (`htdemucs`) eller Bästa kvalitet (`htdemucs_ft`); "Separera om låten" i menyn
 - Play/paus, hopp ±5 s och loop
 - Export av mixen som WAV med aktuella volymer, mute/solo, tonläge och tempo
 - Tidigare låtar sparas och öppnas direkt (knappen uppe till vänster) — känns igen på innehållet, även om filen flyttats
@@ -116,14 +118,16 @@ Sources/
     MixerExporter          offline-rendering: volym → mixer → tonhöjd/tempo → klippning
     WaveformComputer       vågformstoppar ur en ljudfil
     BeatAnalyzer           tempoanalys av en ljudfil (trumspåret)
+    StemResidual           "Övrigt" = originalet − sång − trummor − bas
   StemSplitter/            Appen (SwiftUI + AVFoundation):
     StemSplitterApp        fönster, menyer, inställningar, avslutar underprocesser vid stängning
     AppViewModel           tillstånd: avbrytbar laddning, bibliotek, mix, export
     ContentView            sidhuvud + tidslinje + reglage + transportfält, drag-and-drop
     HeaderBar              titel med BPM, tidigare låtar (popover), meny med tempoval
-    TimelineView           spår, taktlinjal, taktlinjer och spelhuvud
-    MixerPanel / TransportPill / StatusViews / SettingsView
-    Theme / Components     färger (ljust och mörkt) och pillerreglage, runda knappar
+    TimelineView           färgade spår med volym/mute/solo, taktlinjal, taktlinjer och spelhuvud
+    TransportPill          uppspelning + kompakta knappar för tempo, tonläge och klick (paneler)
+    StatusViews / SettingsView
+    Theme / Components     färger (ljust och mörkt), smala reglage, värdeknappar, runda knappar
     WaveformView           vågform (Canvas)
     PlaybackEngine         ljudgraf som byggs en gång: spelare + klick → stem-mixer → tonhöjd/tempo
     SeparationService      Python-miljö + Demucs, med avbrytning och städning
@@ -139,8 +143,8 @@ Tests/
 
 1. Du väljer en lokal ljudfil. En nyckel räknas fram ur filens innehåll; finns låten redan i biblioteket öppnas den direkt.
 2. Första gången skapas `~/Library/Application Support/StemSplitter/venv` och Demucs installeras där (torch 2.5.1 på Apple Silicon, 2.2.2 på Intel).
-3. Filer som inte är WAV konverteras först till 44,1 kHz stereo-WAV via AVFoundation (så Demucs slipper ffmpeg).
-4. Demucs körs lokalt på GPU (MPS) eller CPU. Stems flyttas atomiskt till `projects/<nyckel>/` och arbetsfilerna tas bort.
+3. Filen görs om till 44,1 kHz stereo-WAV via AVFoundation (så Demucs slipper ffmpeg och stems blir exakt lika långa som originalet).
+4. Demucs körs lokalt på GPU (MPS) eller CPU med `--float32`. "Övrigt" skrivs om som originalet minus sång, trummor och bas (`StemResidual`). Stems flyttas atomiskt till `projects/<nyckel>/` och arbetsfilerna tas bort.
 5. Uppspelningen använder en `AVAudioPlayerNode` per stem → en gemensam mixer → en `AVAudioUnitTimePitch`. Alla spelare startar på samma host-tid.
 6. Tempot analyseras i trumspåret: energiflödet (hela bandet + basbandet) autokorreleras för att hitta tempot, och slagen väljs med dynamisk programmering. Ettan är det slag i takten som oftast har starkast bas.
 7. Klicket schemaläggs per slag på en egen spelare före tempo-enheten och följer därför låten i alla tempon.

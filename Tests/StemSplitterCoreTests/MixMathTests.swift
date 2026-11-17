@@ -38,4 +38,37 @@ struct MixMathTests {
         #expect(MixMath.cents(fromSemitones: -12) == -1200)
         #expect(MixMath.cents(fromSemitones: 99) == 2400)
     }
+
+    @Test func residualMakesStemsSumToMix() {
+        let mix: [Float] = [1.0, 0.5, -0.25, 0]
+        let vocals: [Float] = [0.5, 0.1, 0, 0.2]
+        let drums: [Float] = [0.25, 0, -0.25, -0.1]
+        var output = [Float](repeating: 9, count: 4)
+        mix.withUnsafeBufferPointer { m in
+            vocals.withUnsafeBufferPointer { v in
+                drums.withUnsafeBufferPointer { d in
+                    output.withUnsafeMutableBufferPointer { o in
+                        MixMath.residual(mix: m.baseAddress!, subtracting: [v.baseAddress!, d.baseAddress!],
+                                         into: o.baseAddress!, count: 4)
+                    }
+                }
+            }
+        }
+        #expect(output == [0.25, 0.4, 0, -0.1])
+        // Summan av alla delar blir exakt mixen
+        for i in 0..<4 {
+            #expect(abs(vocals[i] + drums[i] + output[i] - mix[i]) < 1e-6)
+        }
+    }
+
+    @Test func decibelsCompareEnergies() {
+        #expect(abs(MixMath.decibels(energy: 1, reference: 100) - (-20)) < 1e-9)
+        #expect(MixMath.decibels(energy: 0, reference: 1) == -.infinity)
+    }
+
+    @Test func neutralTuningIsDetected() {
+        #expect(MixMath.isNeutralTuning(tempo: 1, semitones: 0))
+        #expect(!MixMath.isNeutralTuning(tempo: 1.05, semitones: 0))
+        #expect(!MixMath.isNeutralTuning(tempo: 1, semitones: -1))
+    }
 }

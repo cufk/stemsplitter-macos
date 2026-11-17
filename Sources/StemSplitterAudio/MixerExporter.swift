@@ -67,6 +67,8 @@ public enum MixerExporter {
         engine.connect(timePitch, to: engine.mainMixerNode, format: format)
         timePitch.pitch = MixMath.cents(fromSemitones: pitchSemitones)
         timePitch.rate = Float(tempo)
+        // Obearbetat ljud när tempo och tonläge är neutrala
+        timePitch.bypass = MixMath.isNeutralTuning(tempo: tempo, semitones: pitchSemitones)
 
         try engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: chunkFrames)
         for source in sources {
@@ -83,7 +85,7 @@ public enum MixerExporter {
         }
         // Spelarna ger tystnad efter filslut i offline-läge, så vi måste själva veta när vi är klara.
         let total = MixMath.outputFrameCount(sourceDuration: sourceDuration, tempo: tempo, sampleRate: format.sampleRate)
-            + Int64(timePitch.latency * format.sampleRate)
+            + (timePitch.bypass ? 0 : Int64(timePitch.latency * format.sampleRate))
 
         do {
             let output = try AVAudioFile(
