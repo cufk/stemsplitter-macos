@@ -5,30 +5,40 @@ struct EmptyStateView: View {
     let onOpen: () -> Void
 
     var body: some View {
-        ContentUnavailableView {
-            Label("Dra in en ljudfil", systemImage: "waveform.badge.plus")
-        } description: {
-            Text("Låten delas upp i sång, trummor, bas och övrigt — helt lokalt på din Mac.\nWAV, AIFF, CAF, MP3, M4A, AAC och FLAC stöds.")
-        } actions: {
-            Button("Öppna ljudfil…", action: onOpen)
-                .glassButton(prominent: true)
-                .controlSize(.large)
+        VStack(spacing: 18) {
+            Button(action: onOpen) {
+                Image(systemName: "plus")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(Theme.inkInverse)
+                    .frame(width: 64, height: 64)
+                    .background(Circle().fill(isTargeted ? Theme.accent : Theme.ink))
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.defaultAction)
+            Text("Dra in en ljudfil")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Theme.ink)
+            Text("Låten delas upp i sång, trummor, bas och övrigt — helt lokalt på din Mac. Tempot analyseras så att du kan öva med klick.")
+                .font(.callout)
+                .foregroundStyle(Theme.secondaryInk)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 360)
+            Text("WAV · AIFF · CAF · MP3 · M4A · AAC · FLAC")
+                .font(.caption)
+                .foregroundStyle(Theme.secondaryInk)
         }
-        .padding(40)
-        .background {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .strokeBorder(
-                    isTargeted ? Color.accentColor : Color.secondary.opacity(0.25),
-                    style: StrokeStyle(lineWidth: isTargeted ? 2.5 : 1.5, dash: [8, 6])
-                )
-                .background(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .fill(isTargeted ? Color.accentColor.opacity(0.08) : Color.clear)
-                )
-        }
-        .frame(maxWidth: 560)
+        .padding(44)
+        .frame(maxWidth: 520)
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(isTargeted ? Theme.soloLane.opacity(0.5) : Theme.card)
+                .shadow(color: Theme.shadow, radius: 10, y: 3)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .strokeBorder(isTargeted ? Theme.accent : Color.clear, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+        )
         .animation(.easeInOut(duration: 0.15), value: isTargeted)
-        .padding(32)
     }
 }
 
@@ -39,41 +49,71 @@ struct WorkingView: View {
     let onCancel: () -> Void
 
     var body: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 16) {
             Image(systemName: "waveform")
-                .font(.system(size: 36, weight: .medium))
-                .foregroundStyle(.tint)
+                .font(.system(size: 30, weight: .medium))
+                .foregroundStyle(Theme.accent)
                 .symbolEffect(.variableColor.iterative, isActive: true)
             if let title {
                 Text(title)
-                    .font(.title3.weight(.semibold))
+                    .font(.headline)
+                    .foregroundStyle(Theme.ink)
                     .lineLimit(1)
             }
+            ProgressBar(fraction: progress)
+                .frame(width: 320, height: 6)
             if let progress {
-                ProgressView(value: progress)
-                    .progressViewStyle(.linear)
-                    .frame(width: 320)
                 Text("\(Int(progress * 100)) %")
                     .font(.callout.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            } else {
-                ProgressView()
-                    .progressViewStyle(.linear)
-                    .frame(width: 320)
+                    .foregroundStyle(Theme.secondaryInk)
             }
             Text(status)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondaryInk)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .frame(maxWidth: 380)
-            Button("Avbryt", role: .cancel, action: onCancel)
-                .glassButton()
+            Button("Avbryt", action: onCancel)
+                .buttonStyle(.plain)
+                .font(.callout.weight(.medium))
+                .foregroundStyle(Theme.ink)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 8)
+                .background(Capsule().fill(Theme.subtle))
                 .keyboardShortcut(.cancelAction)
         }
-        .padding(32)
+        .padding(36)
         .frame(width: 460)
-        .glassCard(cornerRadius: 28)
+        .card(cornerRadius: 26)
+    }
+}
+
+/// Orange förloppsindikator; utan värde visas en glidande del.
+private struct ProgressBar: View {
+    let fraction: Double?
+    @State private var phase: CGFloat = -0.3
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Theme.subtle)
+                if let fraction {
+                    Capsule().fill(Theme.accent)
+                        .frame(width: geometry.size.width * CGFloat(min(max(fraction, 0), 1)))
+                        .animation(.easeOut(duration: 0.2), value: fraction)
+                } else {
+                    Capsule().fill(Theme.accent)
+                        .frame(width: geometry.size.width * 0.3)
+                        .offset(x: geometry.size.width * phase)
+                        .onAppear {
+                            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                                phase = 0.7
+                            }
+                        }
+                }
+            }
+            .clipShape(Capsule())
+        }
     }
 }
 
@@ -83,23 +123,41 @@ struct FailureView: View {
     let onOpen: () -> Void
 
     var body: some View {
-        ContentUnavailableView {
-            Label("Något gick fel", systemImage: "exclamationmark.triangle")
-        } description: {
+        VStack(spacing: 14) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 28))
+                .foregroundStyle(Theme.accent)
+            Text("Något gick fel")
+                .font(.headline)
+                .foregroundStyle(Theme.ink)
             ScrollView {
                 Text(message)
+                    .font(.callout)
+                    .foregroundStyle(Theme.secondaryInk)
+                    .multilineTextAlignment(.center)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity)
             }
-            .frame(maxHeight: 160)
-        } actions: {
-            HStack {
+            .frame(maxHeight: 140)
+            HStack(spacing: 10) {
                 Button("Försök igen", action: onRetry)
-                    .glassButton(prominent: true)
+                    .buttonStyle(.plain)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(Theme.inkInverse)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(Theme.ink))
                 Button("Öppna annan fil…", action: onOpen)
-                    .glassButton()
+                    .buttonStyle(.plain)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(Theme.subtle))
             }
         }
-        .frame(maxWidth: 560)
+        .padding(32)
+        .frame(width: 480)
+        .card(cornerRadius: 26)
     }
 }

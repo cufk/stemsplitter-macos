@@ -10,7 +10,8 @@ final class Playhead: ObservableObject {
 }
 
 /// Ljudgraf som byggs en gång per låt:
-///   spelare (en per stem, volym) → stem-mixer → tonhöjd/tempo (en gemensam) → huvudmixer.
+///   spelare (en per stem, volym) + klickspelare → stem-mixer → tonhöjd/tempo (en gemensam) → huvudmixer.
+/// Klicket ligger före tempo-enheten och följer därför låten även när tempot ändras.
 /// Play/paus/sök startar bara om spelarna — motorn och filerna ligger kvar.
 @MainActor
 final class PlaybackEngine: ObservableObject {
@@ -29,11 +30,27 @@ final class PlaybackEngine: ObservableObject {
         didSet { timePitch.rate = Float(tempo) }
     }
 
+    /// Tempo och slag för klicket och taktlinjalen.
+    @Published var beatGrid: BeatGrid? {
+        didSet { rescheduleIfPlaying() }
+    }
+
+    @Published var clickEnabled = false {
+        didSet { updateClickVolume() }
+    }
+
+    @Published var clickVolume: Double = 0.7 {
+        didSet { updateClickVolume() }
+    }
+
     let playhead = Playhead()
 
     private let engine = AVAudioEngine()
     private let stemMixer = AVAudioMixerNode()
     private let timePitch = AVAudioUnitTimePitch()
+    private let clickPlayer = AVAudioPlayerNode()
+    private var clickBuffers: (accent: AVAudioPCMBuffer, normal: AVAudioPCMBuffer)?
+    private var busSampleRate: Double = 44100
     private var players: [StemKind: AVAudioPlayerNode] = [:]
     private var files: [StemKind: AVAudioFile] = [:]
     private var referenceKind: StemKind?
@@ -47,6 +64,8 @@ final class PlaybackEngine: ObservableObject {
     init() {
         engine.attach(stemMixer)
         engine.attach(timePitch)
+        engine.attach(clickPlayer)
+        updateClickVolume()
         // T.ex. byte till AirPods: motorn stoppas av systemet — fortsätt där vi var.
         configurationObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
@@ -63,7 +82,7 @@ final class PlaybackEngine: ObservableObject {
 
     func load(_ tracks: [StemTrack]) throws {
         unload()
-        var busSampleRate: Double = 0
+        var firstSampleRate: Double = 0
         var longest: (kind: StemKind, length: Double)?
         for track in tracks {
             let file = try AVAudioFile(forReading: track.url)
@@ -74,9 +93,11 @@ final class PlaybackEngine: ObservableObject {
             files[track.kind] = file
             let seconds = Double(file.length) / file.processingFormat.sampleRate
             if seconds > (longest?.length ?? -1) { longest = (track.kind, seconds) }
-            if busSampleRate == 0 { busSampleRate = file.processingFormat.sampleRate }
+            if firstSampleRate == 0 { firstSampleRate = file.processingFormat.sampleRate }
         }
-        let busFormat = AVAudioFormat(standardFormatWithSampleRate: busSampleRate > 0 ? busSampleRate : 44100, channels: 2)
+        busSampleRate = firstSampleRate > 0 ? firstSampleRate : 44100
+        let busFormat = AVAudioFormat(standardFormatWithSampleRate: busSampleRate, channels: 2)
+        connectClick()
         engine.connect(stemMixer, to: timePitch, format: busFormat)
         engine.connect(timePitch, to: engine.mainMixerNode, format: busFormat)
         timePitch.pitch = MixMath.cents(fromSemitones: pitchSemitones)
@@ -98,6 +119,7 @@ final class PlaybackEngine: ObservableObject {
         players.removeAll()
         files.removeAll()
         referenceKind = nil
+        beatGrid = nil
         if engine.isRunning { engine.stop() }
         duration = 0
         playhead.position = 0
@@ -150,6 +172,7 @@ final class PlaybackEngine: ObservableObject {
             }
         }
         guard scheduled > 0 else { return }
+        scheduleClicks(from: start)
         pendingCompletions = scheduled
         startOffset = start
         playhead.position = start
@@ -159,6 +182,7 @@ final class PlaybackEngine: ObservableObject {
         for player in players.values {
             player.play(at: startTime)
         }
+        clickPlayer.play(at: startTime)
         isPlaying = true
         lastError = nil
         startTimer()
@@ -201,6 +225,51 @@ final class PlaybackEngine: ObservableObject {
         for player in players.values {
             player.stop()
         }
+        clickPlayer.stop()
+    }
+
+    // MARK: - Klick
+
+    private func connectClick() {
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: busSampleRate, channels: 1) else { return }
+        engine.disconnectNodeOutput(clickPlayer)
+        engine.connect(clickPlayer, to: stemMixer, fromBus: 0, toBus: stemMixer.nextAvailableInputBus, format: format)
+        func buffer(accent: Bool) -> AVAudioPCMBuffer? {
+            let samples = ClickSynth.click(sampleRate: busSampleRate, accent: accent)
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)),
+                  let channel = buffer.floatChannelData?[0] else { return nil }
+            buffer.frameLength = AVAudioFrameCount(samples.count)
+            for (index, value) in samples.enumerated() { channel[index] = value }
+            return buffer
+        }
+        if let accent = buffer(accent: true), let normal = buffer(accent: false) {
+            clickBuffers = (accent, normal)
+        }
+    }
+
+    /// Schemalägger ett klick per slag från `start`, i spelarens egen tidslinje (källans tid).
+    private func scheduleClicks(from start: TimeInterval) {
+        guard let grid = beatGrid, let buffers = clickBuffers else { return }
+        let sampleRate = busSampleRate
+        for index in grid.firstBeatIndex(atOrAfter: start - 0.001)..<grid.beats.count {
+            let frame = AVAudioFramePosition(max(0, (grid.beats[index] - start) * sampleRate).rounded())
+            clickPlayer.scheduleBuffer(
+                grid.isDownbeat(index) ? buffers.accent : buffers.normal,
+                at: AVAudioTime(sampleTime: frame, atRate: sampleRate),
+                options: [],
+                completionHandler: nil
+            )
+        }
+    }
+
+    private func updateClickVolume() {
+        clickPlayer.volume = clickEnabled ? Float(clickVolume) : 0
+    }
+
+    private func rescheduleIfPlaying() {
+        guard isPlaying else { return }
+        updatePosition()
+        play(from: playhead.position)
     }
 
     private func segmentFinished(generation finished: Int) {

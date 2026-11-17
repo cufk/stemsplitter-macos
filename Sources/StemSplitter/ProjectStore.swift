@@ -72,10 +72,20 @@ enum ProjectStore {
     }
 
     static func savePeaks(key: String, peaks: [StemKind: [Float]]) {
-        var meta = meta(key: key) ?? ProjectMeta(sourceName: key, createdAt: Date(), model: "htdemucs")
-        for (kind, values) in peaks {
-            meta.peaks[kind.rawValue] = values
+        updateMeta(key: key) { meta in
+            for (kind, values) in peaks {
+                meta.peaks[kind.rawValue] = values
+            }
         }
+    }
+
+    static func saveBeatGrid(key: String, grid: BeatGrid?) {
+        updateMeta(key: key) { $0.beatGrid = grid }
+    }
+
+    private static func updateMeta(key: String, _ change: (inout ProjectMeta) -> Void) {
+        var meta = meta(key: key) ?? ProjectMeta(sourceName: key, createdAt: Date(), model: "htdemucs")
+        change(&meta)
         let url = directory(for: key).appendingPathComponent(ProjectMeta.fileName)
         try? meta.encoded().write(to: url, options: .atomic)
     }

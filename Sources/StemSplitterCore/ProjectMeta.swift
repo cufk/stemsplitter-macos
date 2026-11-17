@@ -9,12 +9,15 @@ public struct ProjectMeta: Codable, Equatable, Sendable {
     public var model: String
     /// Vågformstoppar per stem, nyckel = `StemKind.rawValue`.
     public var peaks: [String: [Float]]
+    /// Tempo och slag (saknas i projekt från äldre versioner).
+    public var beatGrid: BeatGrid?
 
-    public init(sourceName: String, createdAt: Date, model: String, peaks: [String: [Float]] = [:]) {
+    public init(sourceName: String, createdAt: Date, model: String, peaks: [String: [Float]] = [:], beatGrid: BeatGrid? = nil) {
         self.sourceName = sourceName
         self.createdAt = createdAt
         self.model = model
         self.peaks = peaks
+        self.beatGrid = beatGrid
     }
 
     public var displayName: String {

@@ -24,6 +24,7 @@ final class AppViewModel: ObservableObject {
     @Published private(set) var currentProjectKey: String?
     @Published private(set) var library: [ProjectSummary] = []
     @Published private(set) var cacheSize: Int64 = 0
+    @Published private(set) var isAnalyzingTempo = false
     @Published private(set) var isExporting = false
     @Published private(set) var exportProgress: Double = 0
     @Published var exportedURL: URL?
@@ -181,19 +182,97 @@ final class AppViewModel: ObservableObject {
         progressFraction = nil
         phase = .ready
 
-        // Vågformer från cachen, annars beräknas och sparas de.
-        if let meta, tracks.allSatisfy({ meta.peaks(for: $0.kind) != nil }) {
-            for track in tracks { track.waveform = meta.peaks(for: track.kind) ?? [] }
-            return
+        // Vågformer och tempo från cachen, annars beräknas och sparas de (parallellt).
+        let cachedPeaks = meta.flatMap { meta in
+            tracks.allSatisfy({ meta.peaks(for: $0.kind) != nil }) ? meta : nil
         }
-        let peaks = await computeWaveforms(for: tracks)
+        if let cachedPeaks {
+            for track in tracks { track.waveform = cachedPeaks.peaks(for: track.kind) ?? [] }
+        }
+        if let grid = meta?.beatGrid {
+            playback.beatGrid = grid
+        }
+
+        let needsGrid = meta?.beatGrid == nil
+        if needsGrid { isAnalyzingTempo = true }
+        // Tempoanalysen körs utanför huvudtråden medan vågformerna beräknas.
+        let gridTask: Task<BeatGrid??, Never>? = needsGrid
+            ? Task.detached(priority: .userInitiated) { await Self.analyzeTempo(urls: urls) }
+            : nil
+
+        if cachedPeaks == nil {
+            let peaks = await computeWaveforms(for: tracks)
+            if isCurrent(id), currentProjectKey == key {
+                for track in tracks { track.waveform = peaks[track.kind] ?? [] }
+                ProjectStore.savePeaks(key: key, peaks: peaks)
+            }
+        }
+        guard let gridTask else { return }
+        let analyzed = await withTaskCancellationHandler {
+            await gridTask.value
+        } onCancel: {
+            gridTask.cancel()
+        }
         guard isCurrent(id), currentProjectKey == key else { return }
-        for track in tracks { track.waveform = peaks[track.kind] ?? [] }
-        ProjectStore.savePeaks(key: key, peaks: peaks)
+        isAnalyzingTempo = false
+        if let analyzed {
+            playback.beatGrid = analyzed
+            ProjectStore.saveBeatGrid(key: key, grid: analyzed)
+        }
+    }
+
+    /// Tempo från trumspåret (tydligast puls), annars från "övrigt".
+    /// Returnerar .some(nil) när analysen är klar men inget tempo hittades.
+    private nonisolated static func analyzeTempo(urls: [StemKind: URL]) async -> BeatGrid?? {
+        for kind in [StemKind.drums, .other, .bass] {
+            guard let url = urls[kind] else { continue }
+            if let grid = await BeatAnalyzer.analyze(url: url) {
+                return .some(grid)
+            }
+            if Task.isCancelled { return nil }
+        }
+        return .some(nil)
+    }
+
+    // MARK: - Tempo
+
+    func halveTempo() { updateGrid { $0.halved() } }
+    func doubleTempo() { updateGrid { $0.doubled() } }
+    func shiftDownbeat() { updateGrid { $0.shiftingDownbeat(by: 1) } }
+
+    func reanalyzeTempo() {
+        guard let key = currentProjectKey, let urls = ProjectStore.stemURLs(key: key), !isAnalyzingTempo else { return }
+        isAnalyzingTempo = true
+        Task {
+            let result = await Task.detached(priority: .userInitiated) { await Self.analyzeTempo(urls: urls) }.value
+            isAnalyzingTempo = false
+            guard currentProjectKey == key, let result else { return }
+            playback.beatGrid = result
+            ProjectStore.saveBeatGrid(key: key, grid: result)
+            if result == nil {
+                alertMessage = "Hittade inget tydligt tempo i låten."
+            }
+        }
+    }
+
+    private func updateGrid(_ change: (BeatGrid) -> BeatGrid) {
+        guard let grid = playback.beatGrid, let key = currentProjectKey else { return }
+        let updated = change(grid)
+        playback.beatGrid = updated
+        ProjectStore.saveBeatGrid(key: key, grid: updated)
+    }
+
+    var tempoDescription: String {
+        if isAnalyzingTempo { return "Analyserar tempo…" }
+        guard let grid = playback.beatGrid else { return "Tempo okänt" }
+        let whole = grid.bpm.rounded()
+        let bpm = abs(grid.bpm - whole) < 0.05 ? String(Int(whole)) : String(format: "%.1f", grid.bpm)
+        return "\(bpm) BPM · \(grid.beatsPerBar)/4"
     }
 
     private func resetPlayer() {
         playback.unload()
+        isAnalyzingTempo = false
         trackObservers.removeAll()
         stems = []
         currentProjectKey = nil

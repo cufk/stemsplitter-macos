@@ -45,10 +45,11 @@ struct StemSplitterApp: App {
         // Ett fönster (inte WindowGroup) — appen har ett gemensamt tillstånd.
         Window("StemSplitter", id: "main") {
             ContentView(viewModel: viewModel)
-                .frame(minWidth: 860, minHeight: 560)
+                .frame(minWidth: 820, minHeight: 640)
         }
-        .defaultSize(width: 1100, height: 720)
-        .windowToolbarStyle(.unified)
+        .defaultSize(width: 1040, height: 820)
+        // Egen rubrikrad i appen, som i förlagan
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("Öppna ljudfil…") { viewModel.openFileDialog() }
@@ -75,11 +76,22 @@ struct StemSplitterApp: App {
                 Button("Loopa av/på") { viewModel.playback.isLooping.toggle() }
                     .keyboardShortcut("l")
                     .disabled(!viewModel.isReady)
+                Button("Klick av/på") { viewModel.playback.clickEnabled.toggle() }
+                    .keyboardShortcut("k")
+                    .disabled(!viewModel.isReady || viewModel.playback.beatGrid == nil)
                 Button("Återställ tonläge och tempo") { viewModel.playback.resetTuning() }
                     .keyboardShortcut("0")
                     .disabled(!viewModel.isReady)
                 Button("Återställ mixen") { viewModel.resetMix() }
                     .disabled(!viewModel.isReady)
+            }
+            CommandMenu("Tempo") {
+                Button("Halvera tempot") { viewModel.halveTempo() }
+                Button("Dubbla tempot") { viewModel.doubleTempo() }
+                Button("Flytta ettan ett slag") { viewModel.shiftDownbeat() }
+                    .keyboardShortcut("1", modifiers: [.command, .option])
+                Divider()
+                Button("Analysera tempot igen") { viewModel.reanalyzeTempo() }
             }
         }
 

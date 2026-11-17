@@ -5,20 +5,18 @@ import StemSplitterCore
 struct ContentView: View {
     @ObservedObject var viewModel: AppViewModel
     @State private var isTargeted = false
-    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            LibrarySidebar(viewModel: viewModel)
-                .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
-        } detail: {
-            detail
+        VStack(spacing: 0) {
+            HeaderBar(viewModel: viewModel, playback: viewModel.playback)
+                .padding(.horizontal, 28)
+                .padding(.top, 34)   // plats för fönsterknapparna (dold titelrad)
+                .padding(.bottom, 14)
+            content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background { AmbientBackground() }
-                .navigationTitle(viewModel.title ?? "StemSplitter")
-                .navigationSubtitle(subtitle)
-                .toolbar { toolbarContent }
         }
+        .background(Theme.background.ignoresSafeArea())
+        .tint(Theme.accent)
         .dropDestination(for: URL.self) { urls, _ in
             guard let url = urls.first(where: { AudioFileSupport.isSupported($0) }) ?? urls.first else { return false }
             viewModel.open(url)
@@ -42,7 +40,7 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private var detail: some View {
+    private var content: some View {
         switch viewModel.phase {
         case .idle:
             EmptyStateView(isTargeted: isTargeted, onOpen: viewModel.openFileDialog)
@@ -53,58 +51,89 @@ struct ContentView: View {
                 progress: viewModel.progressFraction,
                 onCancel: viewModel.cancelWork
             )
-        case .ready:
-            PlayerView(viewModel: viewModel, playback: viewModel.playback)
-                .overlay {
-                    if isTargeted {
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 3, dash: [10, 6]))
-                            .padding(12)
-                            .allowsHitTesting(false)
-                    }
-                }
         case .failed(let message):
             FailureView(message: message, onRetry: viewModel.retry, onOpen: viewModel.openFileDialog)
+        case .ready:
+            PlayerScreen(viewModel: viewModel, isTargeted: isTargeted)
         }
     }
+}
 
-    private var subtitle: String {
-        switch viewModel.phase {
-        case .idle: return "Lokal stem-separering"
-        case .working: return "Arbetar…"
-        case .ready: return "Sång · Trummor · Bas · Övrigt"
-        case .failed: return "Fel"
+private struct PlayerScreen: View {
+    @ObservedObject var viewModel: AppViewModel
+    let isTargeted: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    TimelineView(viewModel: viewModel, playback: viewModel.playback)
+                    OutlinePillButton(title: "Öppna en annan låt", systemImage: "plus") {
+                        viewModel.openFileDialog()
+                    }
+                    MixerPanel(viewModel: viewModel, playback: viewModel.playback)
+                }
+                .padding(.horizontal, 28)
+                .padding(.top, 8)
+                .padding(.bottom, 20)
+            }
+            VStack(spacing: 10) {
+                ExportStatus(viewModel: viewModel)
+                TransportPill(playback: viewModel.playback)
+            }
+            .padding(.horizontal, 28)
+            .padding(.bottom, 24)
+        }
+        .overlay {
+            if isTargeted {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(Theme.accent, style: StrokeStyle(lineWidth: 2, dash: [10, 6]))
+                    .padding(14)
+                    .allowsHitTesting(false)
+            }
         }
     }
+}
 
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            Button {
-                viewModel.openFileDialog()
-            } label: {
-                Label("Öppna ljudfil", systemImage: "plus")
+private struct ExportStatus: View {
+    @ObservedObject var viewModel: AppViewModel
+
+    var body: some View {
+        Group {
+            if viewModel.isExporting {
+                HStack(spacing: 12) {
+                    ProgressView(value: viewModel.exportProgress)
+                        .frame(width: 160)
+                    Text("Exporterar mix… \(Int(viewModel.exportProgress * 100)) %")
+                        .font(.callout.monospacedDigit())
+                    Button("Avbryt") { viewModel.cancelExport() }
+                        .buttonStyle(.borderless)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 9)
+                .card()
+            } else if let url = viewModel.exportedURL {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.accent)
+                    Text("Sparad: \(url.lastPathComponent)")
+                        .font(.callout)
+                        .lineLimit(1)
+                    Button("Visa i Finder") { viewModel.revealExport() }
+                        .buttonStyle(.borderless)
+                    Button {
+                        viewModel.exportedURL = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Stäng")
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 9)
+                .card()
             }
-            .help("Öppna ljudfil (⌘O)")
         }
-        ToolbarItem(placement: .primaryAction) {
-            Menu {
-                Button("Återställ mixen") { viewModel.resetMix() }
-                Button("Återställ tonläge och tempo") { viewModel.playback.resetTuning() }
-            } label: {
-                Label("Mix", systemImage: "slider.horizontal.3")
-            }
-            .disabled(!viewModel.isReady)
-            .help("Återställ volymer, mute och solo")
-        }
-        ToolbarItem(placement: .primaryAction) {
-            Button {
-                viewModel.exportMix()
-            } label: {
-                Label("Exportera mix", systemImage: "square.and.arrow.up")
-            }
-            .disabled(!viewModel.isReady || viewModel.isExporting)
-            .help("Exportera mixen som WAV (⌘E)")
-        }
+        .animation(.spring(duration: 0.3), value: viewModel.isExporting)
+        .animation(.spring(duration: 0.3), value: viewModel.exportedURL)
     }
 }
