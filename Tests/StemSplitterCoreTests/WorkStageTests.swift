@@ -14,10 +14,8 @@ struct WorkStageTests {
 
     @Test func throttleSkipsSmallChanges() {
         var throttle = ProgressThrottle(step: 0.1)
-        #expect(throttle.accept(0))
-        #expect(!throttle.accept(0.05))
-        #expect(throttle.accept(0.12))
-        #expect(!throttle.accept(0.2))
-        #expect(throttle.accept(1))
+        // #expect kan inte anropa mutating-metoder — samla resultaten först
+        let accepted = [0, 0.05, 0.12, 0.2, 1].map { throttle.accept($0) }
+        #expect(accepted == [true, false, true, false, true])
     }
 }
