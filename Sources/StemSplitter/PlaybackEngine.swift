@@ -2,107 +2,109 @@ import AVFoundation
 import Combine
 import StemSplitterCore
 
-final class PlaybackEngine: ObservableObject {
-    @Published var isPlaying = false
-    @Published var isLooping = false
+/// Uppspelningspositionen i ett eget objekt, så att bara vyer som visar positionen
+/// ritas om ~30 gånger per sekund (inte hela fönstret).
+@MainActor
+final class Playhead: ObservableObject {
     @Published var position: TimeInterval = 0
-    @Published var duration: TimeInterval = 0
+}
 
-    /// Tonläge i halvtoner (-12...+12). Ändrar INTE tempo.
+/// Ljudgraf som byggs en gång per låt:
+///   spelare (en per stem, volym) → stem-mixer → tonhöjd/tempo (en gemensam) → huvudmixer.
+/// Play/paus/sök startar bara om spelarna — motorn och filerna ligger kvar.
+@MainActor
+final class PlaybackEngine: ObservableObject {
+    @Published private(set) var isPlaying = false
+    @Published var isLooping = false
+    @Published private(set) var duration: TimeInterval = 0
+    @Published private(set) var lastError: String?
+
+    /// Tonläge i halvtoner (-12...+12). Ändrar inte tempo.
     @Published var pitchSemitones: Double = 0 {
-        didSet { applyPitch() }
+        didSet { timePitch.pitch = MixMath.cents(fromSemitones: pitchSemitones) }
     }
 
-    /// Tempo som multipel (0.5...2.0). Ändrar INTE tonläge.
+    /// Tempo som multipel (0.5...2.0). Ändrar inte tonläge.
     @Published var tempo: Double = 1.0 {
-        didSet { applyTempo() }
+        didSet { timePitch.rate = Float(tempo) }
     }
+
+    let playhead = Playhead()
 
     private let engine = AVAudioEngine()
+    private let stemMixer = AVAudioMixerNode()
+    private let timePitch = AVAudioUnitTimePitch()
     private var players: [StemKind: AVAudioPlayerNode] = [:]
-    private var timePitches: [StemKind: AVAudioUnitTimePitch] = [:]
     private var files: [StemKind: AVAudioFile] = [:]
-    private var tracks: [StemTrack] = []
-    private var startHostTime: UInt64 = 0
-    private var startOffset: TimeInterval = 0
+    private var referenceKind: StemKind?
+    /// Ökas varje gång spelarna stoppas, så att gamla klar-signaler (som även kommer vid stop) ignoreras.
+    private var generation = 0
     private var pendingCompletions = 0
+    private var startOffset: TimeInterval = 0
     private var timer: Timer?
+    private var configurationObserver: NSObjectProtocol?
 
-    func load(_ newTracks: [StemTrack]) throws {
-        unload()
-        tracks = newTracks
-        try buildGraph()
-        duration = tracks.reduce(0) { max($0, files[$1.kind].map { Double($0.length) / $0.processingFormat.sampleRate } ?? 0) }
-        position = 0
+    init() {
+        engine.attach(stemMixer)
+        engine.attach(timePitch)
+        // T.ex. byte till AirPods: motorn stoppas av systemet — fortsätt där vi var.
+        configurationObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.handleConfigurationChange()
+            }
+        }
     }
 
-    /// Bygger (om) hela ljudgrafen: spelare -> AVAudioUnitTimePitch -> mixer.
-    private func buildGraph() throws {
-        for (_, player) in players {
-            player.stop()
-            engine.detach(player)
-        }
-        for (_, unit) in timePitches {
-            engine.detach(unit)
-        }
-        players.removeAll()
-        timePitches.removeAll()
-        files.removeAll()
-        if engine.isRunning {
-            engine.stop()
-        }
+    var isLoaded: Bool { !players.isEmpty }
+
+    func load(_ tracks: [StemTrack]) throws {
+        unload()
+        var busSampleRate: Double = 0
+        var longest: (kind: StemKind, length: Double)?
         for track in tracks {
             let file = try AVAudioFile(forReading: track.url)
             let player = AVAudioPlayerNode()
-            let unit = AVAudioUnitTimePitch()
-            unit.pitch = Float(pitchSemitones)
-            unit.rate = Float(tempo)
             engine.attach(player)
-            engine.attach(unit)
-            engine.connect(player, to: unit, format: file.processingFormat)
-            engine.connect(unit, to: engine.mainMixerNode, format: file.processingFormat)
-            player.volume = track.muted ? 0 : Float(track.volume)
-            files[track.kind] = file
+            engine.connect(player, to: stemMixer, fromBus: 0, toBus: stemMixer.nextAvailableInputBus, format: file.processingFormat)
             players[track.kind] = player
-            timePitches[track.kind] = unit
+            files[track.kind] = file
+            let seconds = Double(file.length) / file.processingFormat.sampleRate
+            if seconds > (longest?.length ?? -1) { longest = (track.kind, seconds) }
+            if busSampleRate == 0 { busSampleRate = file.processingFormat.sampleRate }
         }
+        let busFormat = AVAudioFormat(standardFormatWithSampleRate: busSampleRate > 0 ? busSampleRate : 44100, channels: 2)
+        engine.connect(stemMixer, to: timePitch, format: busFormat)
+        engine.connect(timePitch, to: engine.mainMixerNode, format: busFormat)
+        timePitch.pitch = MixMath.cents(fromSemitones: pitchSemitones)
+        timePitch.rate = Float(tempo)
+        referenceKind = longest?.kind
+        duration = longest?.length ?? 0
+        playhead.position = 0
+        startOffset = 0
+        engine.prepare()
     }
 
     func unload() {
-        stop()
-        for (_, player) in players {
+        stopPlayers()
+        stopTimer()
+        isPlaying = false
+        for player in players.values {
             engine.detach(player)
         }
-        for (_, unit) in timePitches {
-            engine.detach(unit)
-        }
         players.removeAll()
-        timePitches.removeAll()
         files.removeAll()
-        tracks.removeAll()
+        referenceKind = nil
+        if engine.isRunning { engine.stop() }
         duration = 0
-        position = 0
+        playhead.position = 0
     }
 
-    func setVolume(_ kind: StemKind, volume: Double, muted: Bool) {
-        players[kind]?.volume = muted ? 0 : Float(volume)
-    }
-
-    private func applyPitch() {
-        for (_, unit) in timePitches {
-            unit.pitch = Float(pitchSemitones)
-        }
-    }
-
-    private func applyTempo() {
-        if isPlaying {
-            updatePosition()
-            startOffset = position
-            startHostTime = mach_absolute_time()
-        }
-        for (_, unit) in timePitches {
-            unit.rate = Float(tempo)
-        }
+    func setGain(_ kind: StemKind, _ gain: Float) {
+        players[kind]?.volume = gain
     }
 
     func resetTuning() {
@@ -111,122 +113,127 @@ final class PlaybackEngine: ObservableObject {
     }
 
     func togglePlay() {
-        Task { @MainActor in
-            if isPlaying {
-                pause()
-            } else {
-                let from = position >= duration ? 0 : position
-                await play(from: from)
-            }
-        }
+        isPlaying ? pause() : play()
     }
 
-    func play(from offset: TimeInterval) async {
-        guard !tracks.isEmpty else { return }
-        await MainActor.run {
-            isPlaying = false
-            stopTimer()
-        }
+    func play(from offset: TimeInterval? = nil) {
+        guard isLoaded else { return }
+        let start = Transport.resumePosition(offset ?? playhead.position, duration: duration)
         do {
-            try buildGraph()
-            engine.prepare()
-            try engine.start()
-            pendingCompletions = tracks.count
-            for track in tracks {
-                guard let file = files[track.kind], let player = players[track.kind] else { continue }
-                let fileRate = file.processingFormat.sampleRate
-                let maxFrame: AVAudioFramePosition = file.length > 0 ? file.length - 1 : 0
-                let startFrame = min(AVAudioFramePosition(offset * fileRate), maxFrame)
-                file.framePosition = startFrame
-                player.scheduleFile(file, at: nil) { [weak self] in
-                    self?.handleCompletion()
-                }
-            }
-            for track in tracks {
-                players[track.kind]?.play()
-            }
-            startHostTime = mach_absolute_time()
-            startOffset = offset
-            print("[PlaybackEngine] spelar upp \(tracks.count) stems från \(offset)s, tempo=\(tempo), pitch=\(pitchSemitones)")
-            await MainActor.run {
-                isPlaying = true
-                startTimer()
+            if !engine.isRunning {
+                engine.prepare()
+                try engine.start()
             }
         } catch {
-            print("[PlaybackEngine] start misslyckades: \(error)")
-            await MainActor.run {
-                isPlaying = false
+            lastError = "Kunde inte starta ljudet: \(error.localizedDescription)"
+            return
+        }
+
+        stopPlayers()
+        let currentGeneration = generation
+        var scheduled = 0
+        for (kind, player) in players {
+            guard let file = files[kind],
+                  let segment = Transport.segment(offset: start, sampleRate: file.processingFormat.sampleRate, length: file.length)
+            else { continue }
+            scheduled += 1
+            player.scheduleSegment(
+                file,
+                startingFrame: segment.start,
+                frameCount: AVAudioFrameCount(clamping: segment.count),
+                at: nil,
+                completionCallbackType: .dataPlayedBack
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    self?.segmentFinished(generation: currentGeneration)
+                }
             }
         }
+        guard scheduled > 0 else { return }
+        pendingCompletions = scheduled
+        startOffset = start
+        playhead.position = start
+
+        // Alla spelare startar på samma host-tid → samplesynkrona stems.
+        let startTime = AVAudioTime(hostTime: mach_absolute_time() + AVAudioTime.hostTime(forSeconds: 0.05))
+        for player in players.values {
+            player.play(at: startTime)
+        }
+        isPlaying = true
+        lastError = nil
+        startTimer()
     }
 
     func pause() {
         guard isPlaying else { return }
         updatePosition()
-        stopScheduling()
+        stopPlayers()
         isPlaying = false
         stopTimer()
+        engine.pause()
     }
 
     func stop() {
-        stopScheduling()
-        if engine.isRunning {
-            engine.stop()
-        }
+        stopPlayers()
         isPlaying = false
-        position = 0
-        startOffset = 0
         stopTimer()
+        playhead.position = 0
+        startOffset = 0
+        if engine.isRunning { engine.pause() }
     }
 
     func seek(to seconds: TimeInterval) {
-        let target = min(max(0, seconds), duration)
+        let target = Transport.clamp(seconds, duration: duration)
         if isPlaying {
-            Task { await play(from: target) }
+            play(from: target)
         } else {
-            position = target
+            playhead.position = target
             startOffset = target
         }
     }
 
-    private func stopScheduling() {
-        for (_, player) in players {
+    func skip(by seconds: TimeInterval) {
+        seek(to: Transport.skip(from: playhead.position, by: seconds, duration: duration))
+    }
+
+    private func stopPlayers() {
+        generation &+= 1
+        for player in players.values {
             player.stop()
         }
     }
 
-    private static func secondsToHostTime(_ seconds: TimeInterval) -> UInt64 {
-        var info = mach_timebase_info_data_t()
-        mach_timebase_info(&info)
-        return UInt64(seconds * 1e9 * Double(info.denom) / Double(info.numer))
-    }
-
-    private static func hostTimeToSeconds(_ hostTime: UInt64) -> TimeInterval {
-        var info = mach_timebase_info_data_t()
-        mach_timebase_info(&info)
-        return Double(hostTime) * Double(info.numer) / Double(info.denom) / 1e9
-    }
-
-    private func handleCompletion() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.pendingCompletions -= 1
-            guard self.pendingCompletions <= 0 else { return }
-            if self.isLooping {
-                Task { await self.play(from: 0) }
-            } else {
-                self.isPlaying = false
-                self.position = self.duration
-                self.stopTimer()
-            }
+    private func segmentFinished(generation finished: Int) {
+        guard finished == generation, isPlaying else { return }
+        pendingCompletions -= 1
+        guard pendingCompletions <= 0 else { return }
+        if isLooping {
+            play(from: 0)
+        } else {
+            stopPlayers()
+            isPlaying = false
+            stopTimer()
+            playhead.position = duration
+            engine.pause()
         }
+    }
+
+    private func handleConfigurationChange() {
+        guard isPlaying else { return }
+        updatePosition()
+        isPlaying = false
+        play(from: playhead.position)
     }
 
     private func startTimer() {
         stopTimer()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
-            self?.updatePosition()
+        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.updatePosition()
+            }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
     }
 
     private func stopTimer() {
@@ -234,10 +241,20 @@ final class PlaybackEngine: ObservableObject {
         timer = nil
     }
 
+    /// Positionen räknas från referensspelarens renderade frames (källans tid),
+    /// så den stämmer även när tempot ändras under uppspelning.
     private func updatePosition() {
-        guard isPlaying, startHostTime != 0 else { return }
-        let now = mach_absolute_time()
-        let elapsed = Self.hostTimeToSeconds(now) - Self.hostTimeToSeconds(startHostTime)
-        position = min(startOffset + elapsed * tempo, duration)
+        guard isPlaying,
+              let kind = referenceKind,
+              let player = players[kind],
+              let nodeTime = player.lastRenderTime,
+              let playerTime = player.playerTime(forNodeTime: nodeTime)
+        else { return }
+        playhead.position = Transport.position(
+            startOffset: startOffset,
+            renderedFrames: playerTime.sampleTime,
+            sampleRate: playerTime.sampleRate,
+            duration: duration
+        )
     }
 }

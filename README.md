@@ -8,18 +8,19 @@ All bearbetning sker **100 % lokalt på din Mac**. Ingen ljudfil skickas någons
 
 ## Funktioner
 
-- Välj en lokal ljudfil (WAV, AIFF, CAF, MP3, M4A, AAC, FLAC) via dialog eller drag-and-drop
-- Stem-separation lokalt med [Demucs](https://github.com/facebookresearch/demucs) (`htdemucs`: sång / trummor / bas / övrigt)
-- Uppspelning med **individuell volym och mute per stem**, synkroniserad uppspelning
-- **Tonläge (pitch)** och **tempo** som separata reglage — pitch ändrar inte tempo och tvärtom (via `AVAudioUnitTimePitch` per stem)
-- Play / paus / stop / loop och sökning i låten
-- Vågformsvisning per stem
-- Export av en mixad WAV-fil med dina aktuella volyminställningar
+- Välj en lokal ljudfil (WAV, AIFF, CAF, MP3, M4A, AAC, FLAC) via dialog, ⌘O eller drag-and-drop
+- Stem-separering lokalt med [Demucs](https://github.com/facebookresearch/demucs) (`htdemucs`: sång / trummor / bas / övrigt), på GPU (MPS) när det går — kan avbrytas
+- **Bibliotek** i sidofältet: separerade låtar sparas och öppnas direkt nästa gång (känns igen på innehållet, även om filen flyttats)
+- Samplesynkron uppspelning med **volym, mute och solo per stem**
+- **Tonläge** (±12 halvtoner) och **tempo** (0,5–2×) oberoende av varandra
+- Play/paus, hopp ±5 s, loop och sökning — klicka direkt i en vågform för att hoppa dit
+- Export av mixen som WAV med aktuella volymer, mute/solo, tonläge och tempo
+- Gränssnitt i macOS 26-stil (Liquid Glass) med reservläge för macOS 14–15
 
 ## Krav
 
-- macOS 14 (Sonoma) eller senare
-- Python 3.9+: appen söker själv i PATH, Homebrew och python.org:s standardplatser — saknas det får du en dialog som kan ladda ner och installera Python 3.12 från python.org automatiskt
+- macOS 14 (Sonoma) eller senare — bäst på macOS 26
+- Python 3.9–3.12: appen söker själv på python.org:s och Homebrews standardplatser — saknas det får du en dialog som kan ladda ner och installera Python 3.12 från python.org automatiskt
 - **Hela Xcode krävs** (från App Store) — Command Line Tools saknar makro-plugins (`SwiftUIMacros`, `TestingMacros`) och XCTest, så varken appen (SwiftUI) eller testerna kan byggas med enbart CLT.
 - Internet första gången appen körs: då skapas en virtuell Python-miljö och PyTorch (CPU) + Demucs-modellen laddas ner (någon GB). Därefter fungerar allt offline.
 
@@ -97,34 +98,36 @@ Forsta gangen kan du också behöva högerklicka på appen → **Öppna** (eller
 ```
 Sources/
   StemSplitterCore/        Ren, testbar logik (ingen UI/AVFoundation):
-    StemKind               sång/trummor/bas/övrigt + svenska namn
-    StemLocator            hittar stem-filer i en katalog
-    MixMath                gain/mixning/clamp av ljudkanaler
-    TimeFormat             tidsformatering (m:ss)
-    ProgressParser         parsar procent från Demucs-utdata
-    AudioFileSupport       vilka filändelser som stöds
-  StemSplitter/            Själva appen (SwiftUI + AVFoundation):
-    StemSplitterApp        appens entry point
-    AppViewModel           övergripande tillstånd (idle/busy/ready/failed)
-    ContentView            huvudfönster
-    StemRowView            en rad per stem (volym, mute, vågform)
-    WaveformView           ritning av vågform
-    PlaybackEngine         synkroniserad uppspelning via AVAudioEngine
-    SeparationService      venv + kör Demucs lokalt, strömmar framsteg
-    MixerExporter          exporterar mixad WAV chunk för chunk
-    WaveformComputer       beräknar vågformstoppar från en fil
-    Resources/bootstrap.sh skapar venv och installerar demucs
+    Transport              position, sök, hopp och segment för uppspelningen
+    MixMath                effektiv volym (mute/solo), klippning, exportlängd, halvtoner → cent
+    CacheKey               innehållsbaserad cache-nyckel (FNV-1a över storlek + första/sista MB)
+    PeakAccumulator        vågformstoppar i hinkar
+    ProjectMeta            project.json: källnamn, datum, modell, cachade vågformer
+    PythonVersion          tolkning och stödda versioner (3.9–3.12) + sökvägar att leta på
+    StemKind, StemLocator, TimeFormat, ProgressParser, AudioFileSupport
+  StemSplitter/            Appen (SwiftUI + AVFoundation):
+    StemSplitterApp        fönster, menyer, inställningar, avslutar underprocesser vid stängning
+    AppViewModel           tillstånd: avbrytbar laddning, bibliotek, mix, export
+    ContentView            NavigationSplitView: bibliotek + spelare, verktygsfält, drag-and-drop
+    PlayerView / StemRowView / TransportBar / StatusViews / LibrarySidebar / SettingsView
+    Glass                  Liquid Glass på macOS 26, material som reserv
+    WaveformView           vågform (Canvas) + spelhuvud som enda vy som följer positionen
+    PlaybackEngine         ljudgraf som byggs en gång: spelare → stem-mixer → tonhöjd/tempo
+    MixerExporter          offline-rendering genom samma kedja
+    SeparationService      Python-miljö + Demucs, med avbrytning och städning
+    ProcessRunner          kör processer, strömmar rader, avbryts med Task.cancel()
+    ProjectStore           cachen: atomiska projekt, lista, ta bort, storlek
+    AudioConverter         valfritt format → 44,1 kHz stereo WAV (inkl. 48 kHz och mono)
+    Resources/bootstrap.sh skapar venv och installerar Demucs (Apple Silicon och Intel)
 Tests/
-  StemSplitterCoreTests/   enhetstester för kärnlogiken
+  StemSplitterCoreTests/   enhetstester för kärnlogiken (swift-testing)
 ```
 
 ## Så fungerar det
 
-1. Du väljer en lokal ljudfil.
-2. Vid första körningen skapas `~/Library/Application Support/StemSplitter/venv` och Demucs installeras där.
-3. Icke-WAV-filer konverteras först till WAV via AVFoundation (så demucs slipper ffmpeg).
-4. Demucs körs lokalt: `demucs -n htdemucs -d <mps|cpu> -o <tmp> <fil>` → `sång.wav`, `trummor.wav`, `bas.wav`, `övrigt.wav`. På Apple Silicon används GPU:n (MPS) automatiskt — betydligt snabbare än ren CPU.
-5. Separerade projekt cachas per fil (path+storlek+datum) under `projects/<hash>/`, så samma låt öppnas direkt nästa gång.
-4. Stemsen kopieras till ett projekt under `~/Library/Application Support/StemSplitter/projects/` och laddas i en `AVAudioEngine` med en `AVAudioPlayerNode` per stem. Alla noder schemaläggs på samma absoluta host-tid, så uppspelningen är samplesynkron.
-5. Volym per stem sätts direkt på respektive spelare (`AVAudioPlayerNode.volume`).
-6. Export mixar alla stems chunk-för-chunk (sång×gain + trummor×gain + …, klipps till [-1, 1]) och skriver en float32-WAV.
+1. Du väljer en lokal ljudfil. En nyckel räknas fram ur filens innehåll; finns låten redan i biblioteket öppnas den direkt.
+2. Första gången skapas `~/Library/Application Support/StemSplitter/venv` och Demucs installeras där (torch 2.5.1 på Apple Silicon, 2.2.2 på Intel).
+3. Filer som inte är WAV konverteras först till 44,1 kHz stereo-WAV via AVFoundation (så Demucs slipper ffmpeg).
+4. Demucs körs lokalt på GPU (MPS) eller CPU. Stems flyttas atomiskt till `projects/<nyckel>/` och arbetsfilerna tas bort.
+5. Uppspelningen använder en `AVAudioPlayerNode` per stem → en gemensam mixer → en `AVAudioUnitTimePitch`. Alla spelare startar på samma host-tid.
+6. Exporten renderar samma kedja offline, klipper till [-1, 1] och skriver en float32-WAV.

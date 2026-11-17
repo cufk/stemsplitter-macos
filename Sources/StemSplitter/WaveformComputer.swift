@@ -1,28 +1,28 @@
 import AVFoundation
+import StemSplitterCore
 
 enum WaveformComputer {
-    static func peaks(for url: URL, bucketCount: Int = 160) async -> [Float] {
-        guard let file = try? AVAudioFile(forReading: url) else { return [] }
-        let format = file.processingFormat
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4096)
-        guard let buffer else { return [] }
-        var buckets = [Float](repeating: 0, count: bucketCount)
-        let total: AVAudioFramePosition = AVAudioFramePosition(max(1, file.length))
-
-        while file.framePosition < total {
-            try? file.read(into: buffer, frameCount: 4096)
-            let read = buffer.frameLength
-            if read == 0 { break }
-            guard let data = buffer.floatChannelData else { break }
-            let base = file.framePosition - AVAudioFramePosition(read)
-            let samples = data[0]
-            for i in 0..<Int(read) {
-                let frame = base + AVAudioFramePosition(i)
-                let index = min(bucketCount - 1, Int(Double(frame) / Double(total) * Double(bucketCount)))
-                buckets[index] = max(buckets[index], abs(samples[i]))
+    /// Toppvärden för vågformen, över alla kanaler. Läser i stora block för fart.
+    static func peaks(for url: URL, bucketCount: Int = 400) async -> [Float] {
+        guard let file = try? AVAudioFile(forReading: url),
+              let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 65536)
+        else { return [] }
+        var accumulator = PeakAccumulator(totalFrames: file.length, bucketCount: bucketCount)
+        var position: Int64 = 0
+        while position < file.length {
+            if Task.isCancelled { return [] }
+            do {
+                try file.read(into: buffer, frameCount: buffer.frameCapacity)
+            } catch {
+                break
             }
-            await Task.yield()
+            let count = Int(buffer.frameLength)
+            guard count > 0, let data = buffer.floatChannelData else { break }
+            for channel in 0..<Int(buffer.format.channelCount) {
+                accumulator.add(UnsafeBufferPointer(start: data[channel], count: count), startFrame: position)
+            }
+            position += Int64(count)
         }
-        return buckets
+        return accumulator.peaks
     }
 }

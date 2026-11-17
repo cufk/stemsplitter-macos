@@ -13,11 +13,17 @@ enum PythonInstaller {
 
         let delegate = DownloadDelegate(onProgress: progress)
         let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        // URLSession håller sin delegate tills sessionen ogiltigförklaras
+        defer { session.finishTasksAndInvalidate() }
         let task = session.downloadTask(with: packageURL)
         delegate.task = task
-        let location = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
-            delegate.continuation = continuation
-            task.resume()
+        let location = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
+                delegate.continuation = continuation
+                task.resume()
+            }
+        } onCancel: {
+            task.cancel()
         }
         if FileManager.default.fileExists(atPath: destination.path) {
             try FileManager.default.removeItem(at: destination)
@@ -53,7 +59,14 @@ enum PythonInstaller {
         }
 
         func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-            continuation?.resume(returning: location)
+            // Filen på `location` tas bort när metoden returnerar — flytta den direkt.
+            let kept = FileManager.default.temporaryDirectory.appendingPathComponent("python-\(UUID().uuidString).pkg")
+            do {
+                try FileManager.default.moveItem(at: location, to: kept)
+                continuation?.resume(returning: kept)
+            } catch {
+                continuation?.resume(throwing: error)
+            }
             continuation = nil
         }
 

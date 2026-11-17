@@ -10,6 +10,7 @@ final class StemTrack: ObservableObject, Identifiable {
 
     @Published var volume: Double = 1.0
     @Published var muted: Bool = false
+    @Published var soloed: Bool = false
     @Published var waveform: [Float] = []
 
     init(kind: StemKind, url: URL) {
@@ -24,7 +25,16 @@ extension StemKind {
         case .vocals: return .pink
         case .drums: return .orange
         case .bass: return .purple
-        case .other: return .cyan
+        case .other: return .teal
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .vocals: return "music.mic"
+        case .drums: return "metronome"
+        case .bass: return "guitars"
+        case .other: return "pianokeys"
         }
     }
 }
