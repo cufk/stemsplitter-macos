@@ -14,4 +14,5 @@
 - [ ] Uppspelning: play/paus/stop/loop/sök, stems synkade
 - [ ] Volym/mute per stem
 - [ ] Pitch och tempo påverkar var sitt
+- [ ] BPM visas och stämmer ungefär; klicket ligger på slagen och följer med när tempot ändras
 - [ ] Export av mix ger en spelbar WAV

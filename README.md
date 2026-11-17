@@ -10,12 +10,14 @@ All bearbetning sker **100 % lokalt på din Mac**. Ingen ljudfil skickas någons
 
 - Välj en lokal ljudfil (WAV, AIFF, CAF, MP3, M4A, AAC, FLAC) via dialog, ⌘O eller drag-and-drop
 - Stem-separering lokalt med [Demucs](https://github.com/facebookresearch/demucs) (`htdemucs`: sång / trummor / bas / övrigt), på GPU (MPS) när det går — kan avbrytas
-- **Bibliotek** i sidofältet: separerade låtar sparas och öppnas direkt nästa gång (känns igen på innehållet, även om filen flyttats)
-- Samplesynkron uppspelning med **volym, mute och solo per stem**
-- **Tonläge** (±12 halvtoner) och **tempo** (0,5–2×) oberoende av varandra
-- Play/paus, hopp ±5 s, loop och sökning — klicka direkt i en vågform för att hoppa dit
+- **Tempoanalys**: BPM, varje slag och taktettor hittas i trumspåret; taktlinjal ovanför spåren
+- **Klick** i takt med låten (⌘K) — följer med när tempot ändras, ettan har ett ljusare klick. Halvera/dubbla tempot eller flytta ettan om analysen missar
+- Spår för varje stem under en gemensam tidslinje med spelhuvud; klicka för att hoppa
+- **Volym, mute och solo** per stem, **tempo** (0,5–2×, visas i BPM) och **tonläge** (±12 halvtoner) oberoende av varandra
+- Play/paus, hopp ±5 s och loop
 - Export av mixen som WAV med aktuella volymer, mute/solo, tonläge och tempo
-- Gränssnitt i macOS 26-stil (Liquid Glass) med reservläge för macOS 14–15
+- Tidigare låtar sparas och öppnas direkt (knappen uppe till vänster) — känns igen på innehållet, även om filen flyttats
+- Ljus design med svart och orange som accent, mörkt läge följer systemet
 
 ## Krav
 
@@ -100,6 +102,10 @@ Sources/
   StemSplitterCore/        Ren, testbar logik (ingen UI/AVFoundation):
     Transport              position, sök, hopp och segment för uppspelningen
     MixMath                effektiv volym (mute/solo), klippning, exportlängd, halvtoner → cent
+    OnsetDetector          energiflöde per 5 ms-ram (helt band + basband), strömmande
+    BeatTracker            tempo (viktad autokorrelation), slag (dynamisk programmering), etta
+    BeatGrid               slag, BPM och taktettor; halvera, dubbla, flytta ettan
+    ClickSynth             metronomklick
     CacheKey               innehållsbaserad cache-nyckel (FNV-1a över storlek + första/sista MB)
     PeakAccumulator        vågformstoppar i hinkar
     ProjectMeta            project.json: källnamn, datum, modell, cachade vågformer
@@ -109,14 +115,17 @@ Sources/
     AudioConverter         valfritt format → 44,1 kHz stereo WAV (inkl. 48 kHz och mono)
     MixerExporter          offline-rendering: volym → mixer → tonhöjd/tempo → klippning
     WaveformComputer       vågformstoppar ur en ljudfil
+    BeatAnalyzer           tempoanalys av en ljudfil (trumspåret)
   StemSplitter/            Appen (SwiftUI + AVFoundation):
     StemSplitterApp        fönster, menyer, inställningar, avslutar underprocesser vid stängning
     AppViewModel           tillstånd: avbrytbar laddning, bibliotek, mix, export
-    ContentView            NavigationSplitView: bibliotek + spelare, verktygsfält, drag-and-drop
-    PlayerView / StemRowView / TransportBar / StatusViews / LibrarySidebar / SettingsView
-    Glass                  Liquid Glass på macOS 26, material som reserv
-    WaveformView           vågform (Canvas) + spelhuvud som enda vy som följer positionen
-    PlaybackEngine         ljudgraf som byggs en gång: spelare → stem-mixer → tonhöjd/tempo
+    ContentView            sidhuvud + tidslinje + reglage + transportfält, drag-and-drop
+    HeaderBar              titel med BPM, tidigare låtar (popover), meny med tempoval
+    TimelineView           spår, taktlinjal, taktlinjer och spelhuvud
+    MixerPanel / TransportPill / StatusViews / SettingsView
+    Theme / Components     färger (ljust och mörkt) och pillerreglage, runda knappar
+    WaveformView           vågform (Canvas)
+    PlaybackEngine         ljudgraf som byggs en gång: spelare + klick → stem-mixer → tonhöjd/tempo
     SeparationService      Python-miljö + Demucs, med avbrytning och städning
     ProcessRunner          kör processer, strömmar rader, avbryts med Task.cancel()
     ProjectStore           cachen: atomiska projekt, lista, ta bort, storlek
@@ -133,4 +142,6 @@ Tests/
 3. Filer som inte är WAV konverteras först till 44,1 kHz stereo-WAV via AVFoundation (så Demucs slipper ffmpeg).
 4. Demucs körs lokalt på GPU (MPS) eller CPU. Stems flyttas atomiskt till `projects/<nyckel>/` och arbetsfilerna tas bort.
 5. Uppspelningen använder en `AVAudioPlayerNode` per stem → en gemensam mixer → en `AVAudioUnitTimePitch`. Alla spelare startar på samma host-tid.
-6. Exporten renderar samma kedja offline, klipper till [-1, 1] och skriver en float32-WAV.
+6. Tempot analyseras i trumspåret: energiflödet (hela bandet + basbandet) autokorreleras för att hitta tempot, och slagen väljs med dynamisk programmering. Ettan är det slag i takten som oftast har starkast bas.
+7. Klicket schemaläggs per slag på en egen spelare före tempo-enheten och följer därför låten i alla tempon.
+8. Exporten renderar samma kedja offline (utan klick), klipper till [-1, 1] och skriver en float32-WAV.
