@@ -11,7 +11,9 @@ Se README.md för funktioner och arkitektur. Skriv commit-meddelanden, kommentar
 ## Utvecklingsloopen
 1. **Förstå** — läs berörd kod och befintliga tester innan du ändrar något.
 2. **Lägg logik i `StemSplitterCore`** när det går (ren Swift + Foundation, ingen UI/AVFoundation).
-   Det är den delen som enhetstestas. `StemSplitter`-målet (UI, ljudmotor) ska vara tunt.
+   Det är den delen som enhetstestas. Ljudkod som inte behöver UI (konvertering, export, vågform)
+   ligger i `StemSplitterAudio` och testas med riktiga ljudfiler i `Tests/StemSplitterAudioTests/`.
+   `StemSplitter`-målet (UI, uppspelning, processer) ska vara tunt.
 3. **Skriv tester först eller samtidigt** i `Tests/StemSplitterCoreTests/` med swift-testing
    (`import Testing`, `@Test`, `#expect`). En buggfix kommer med ett test som hade fångat buggen.
 4. **Verifiera**:

@@ -1,4 +1,5 @@
 import Foundation
+import StemSplitterAudio
 import StemSplitterCore
 
 final class SeparationService: @unchecked Sendable {

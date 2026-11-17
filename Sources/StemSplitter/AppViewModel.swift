@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import StemSplitterAudio
 import StemSplitterCore
 import UniformTypeIdentifiers
 

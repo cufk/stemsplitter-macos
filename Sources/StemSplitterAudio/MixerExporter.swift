@@ -1,16 +1,21 @@
 import AVFoundation
 import StemSplitterCore
 
-enum MixerExporter {
-    struct StemInput: Sendable {
-        let url: URL
-        let gain: Float
+public enum MixerExporter {
+    public struct StemInput: Sendable {
+        public let url: URL
+        public let gain: Float
+
+        public init(url: URL, gain: Float) {
+            self.url = url
+            self.gain = gain
+        }
     }
 
-    enum ExportError: LocalizedError {
+    public enum ExportError: LocalizedError {
         case renderFailed
 
-        var errorDescription: String? {
+        public var errorDescription: String? {
             "Offline-renderingen misslyckades."
         }
     }
@@ -26,7 +31,7 @@ enum MixerExporter {
     /// Renderar mixen offline genom samma kedja som uppspelningen:
     /// spelare (volym) → stem-mixer → tonhöjd/tempo → utdata. Klipps till [-1, 1].
     /// Tar bort den halvfärdiga filen om exporten avbryts eller misslyckas.
-    static func exportMix(
+    public static func exportMix(
         stems: [StemInput],
         to outputURL: URL,
         pitchSemitones: Double,

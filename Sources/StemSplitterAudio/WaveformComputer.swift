@@ -1,9 +1,9 @@
 import AVFoundation
 import StemSplitterCore
 
-enum WaveformComputer {
+public enum WaveformComputer {
     /// Toppvärden för vågformen, över alla kanaler. Läser i stora block för fart.
-    static func peaks(for url: URL, bucketCount: Int = 400) async -> [Float] {
+    public static func peaks(for url: URL, bucketCount: Int = 400) async -> [Float] {
         guard let file = try? AVAudioFile(forReading: url),
               let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 65536)
         else { return [] }

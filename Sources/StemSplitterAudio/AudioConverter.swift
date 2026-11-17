@@ -1,11 +1,11 @@
 import AVFoundation
 
-enum AudioConverter {
-    enum ConversionError: LocalizedError {
+public enum AudioConverter {
+    public enum ConversionError: LocalizedError {
         case unsupported
         case failed(String)
 
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .unsupported: return "Kunde inte konvertera filen till WAV."
             case .failed(let reason): return "Konverteringen till WAV misslyckades: \(reason)"
@@ -16,8 +16,13 @@ enum AudioConverter {
     /// Konverterar en ljudfil till en temporär 44,1 kHz stereo float32-WAV
     /// (demucs/torchaudio kan inte alltid läsa t.ex. MP3 utan ffmpeg).
     /// Hanterar andra samplingsfrekvenser (t.ex. 48 kHz) och mono. Anroparen äger och tar bort filen.
-    static func wavCopy(of input: URL, in directory: URL) throws -> URL {
-        let source = try AVAudioFile(forReading: input)
+    public static func wavCopy(of input: URL, in directory: URL) throws -> URL {
+        let source: AVAudioFile
+        do {
+            source = try AVAudioFile(forReading: input)
+        } catch {
+            throw ConversionError.failed("kunde inte öppna \(input.lastPathComponent) (\(error.localizedDescription))")
+        }
         let sourceFormat = source.processingFormat
         guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 44100, channels: 2, interleaved: false),
               let converter = AVAudioConverter(from: sourceFormat, to: format),
@@ -48,7 +53,10 @@ enum AudioConverter {
                 }
                 var conversionError: NSError?
                 let status = converter.convert(to: outputBuffer, error: &conversionError) { packetCount, inputStatus in
-                    if reachedEnd {
+                    // Läs aldrig förbi filslut: AVAudioFile.read misslyckas då utan NSError
+                    // (visades som "Foundation._GenericObjCError error 0").
+                    if reachedEnd || source.framePosition >= source.length {
+                        reachedEnd = true
                         inputStatus.pointee = .endOfStream
                         return nil
                     }

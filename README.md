@@ -105,6 +105,10 @@ Sources/
     ProjectMeta            project.json: källnamn, datum, modell, cachade vågformer
     PythonVersion          tolkning och stödda versioner (3.9–3.12) + sökvägar att leta på
     StemKind, StemLocator, TimeFormat, ProgressParser, AudioFileSupport
+  StemSplitterAudio/       Ljudkod utan UI (AVFoundation), testad med riktiga filer:
+    AudioConverter         valfritt format → 44,1 kHz stereo WAV (inkl. 48 kHz och mono)
+    MixerExporter          offline-rendering: volym → mixer → tonhöjd/tempo → klippning
+    WaveformComputer       vågformstoppar ur en ljudfil
   StemSplitter/            Appen (SwiftUI + AVFoundation):
     StemSplitterApp        fönster, menyer, inställningar, avslutar underprocesser vid stängning
     AppViewModel           tillstånd: avbrytbar laddning, bibliotek, mix, export
@@ -113,14 +117,13 @@ Sources/
     Glass                  Liquid Glass på macOS 26, material som reserv
     WaveformView           vågform (Canvas) + spelhuvud som enda vy som följer positionen
     PlaybackEngine         ljudgraf som byggs en gång: spelare → stem-mixer → tonhöjd/tempo
-    MixerExporter          offline-rendering genom samma kedja
     SeparationService      Python-miljö + Demucs, med avbrytning och städning
     ProcessRunner          kör processer, strömmar rader, avbryts med Task.cancel()
     ProjectStore           cachen: atomiska projekt, lista, ta bort, storlek
-    AudioConverter         valfritt format → 44,1 kHz stereo WAV (inkl. 48 kHz och mono)
     Resources/bootstrap.sh skapar venv och installerar Demucs (Apple Silicon och Intel)
 Tests/
   StemSplitterCoreTests/   enhetstester för kärnlogiken (swift-testing)
+  StemSplitterAudioTests/  konvertering, export och vågform med genererade ljudfiler
 ```
 
 ## Så fungerar det

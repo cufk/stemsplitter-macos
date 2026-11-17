@@ -12,9 +12,15 @@ let package = Package(
             name: "StemSplitterCore",
             path: "Sources/StemSplitterCore"
         ),
+        // Ljudkod (AVFoundation) som går att testa utan gränssnittet
+        .target(
+            name: "StemSplitterAudio",
+            dependencies: ["StemSplitterCore"],
+            path: "Sources/StemSplitterAudio"
+        ),
         .executableTarget(
             name: "StemSplitter",
-            dependencies: ["StemSplitterCore"],
+            dependencies: ["StemSplitterCore", "StemSplitterAudio"],
             path: "Sources/StemSplitter",
             resources: [
                 .process("Resources/bootstrap.sh"),
@@ -25,6 +31,11 @@ let package = Package(
             name: "StemSplitterCoreTests",
             dependencies: ["StemSplitterCore"],
             path: "Tests/StemSplitterCoreTests"
+        ),
+        .testTarget(
+            name: "StemSplitterAudioTests",
+            dependencies: ["StemSplitterAudio", "StemSplitterCore"],
+            path: "Tests/StemSplitterAudioTests"
         )
     ]
 )
