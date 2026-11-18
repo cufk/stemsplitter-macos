@@ -48,7 +48,7 @@
    "vo": [
     "The AI splits it right on your Mac.",
     "Nothing gets uploaded,",
-    "{done}and you can follow every step of the way."
+    "and you can follow every step{done} of the way."
    ]
   },
   {
@@ -142,8 +142,8 @@
    "title": "Save your mix, pick up where you left off",
    "sub": "Export your own mix as WAV. Earlier songs open instantly.",
    "vo": [
-    "{export}Save your own mix as an audio file,",
-    "{library}and jump back into earlier songs, in one click."
+    "Save your own mix{export} as an audio file,",
+    "and jump back into earlier songs,{library} in one click."
    ]
   },
   {
@@ -158,5 +158,7 @@
     "Fully yours."
    ]
   }
- ]
+ ],
+ "kokoro_voice": "af_heart",
+ "speed": 1.0
 }

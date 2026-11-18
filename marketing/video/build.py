@@ -39,8 +39,11 @@ for sc in S["scenes"]:
         pause = re.fullmatch(r"\{pause:([\d.]+)\}", part.strip())
         if pause:            # paus i rösten så att bilden hinner visa det som händer
             t += float(pause.group(1)); continue
-        for m in re.findall(r"\{(\w+)\}", part): marks[m] = t
         text = clean(part)
+        mark_pos = []   # (namn, andel av texten före markeringen)
+        for mm in re.finditer(r"\{(\w+)\}", part):
+            before = clean(part[: mm.start()])
+            mark_pos.append((mm.group(1), len(before) / max(1, len(text))))
         audio = chunk_audio(sc["id"], i)
         if audio is None:
             estimated = True
@@ -48,6 +51,7 @@ for sc in S["scenes"]:
         else:
             dur = len(audio) / SR
             vo_parts.append((t, audio))
+        for name, frac in mark_pos: marks[name] = t + dur * frac
         # ordens tider fördelas efter längd inom delen
         ws = text.split(); weights = [len(re.sub(r"\W", "", w)) + 1.5 for w in ws]; acc = 0
         for w, wt in zip(ws, weights):
@@ -66,7 +70,11 @@ for sc in S["scenes"]:
         if name in marks: pts.append((marks[name] + 0.12, dt))   # klicket strax efter ordets början
     pts.append((r1, d1))
     for a, b in pts:
-        if not warp or a > warp[-1][0] + 1e-6: warp.append([round(a, 3), b])
+        a = round(a, 3)
+        if warp and a <= warp[-1][0]:
+            if b <= warp[-1][1]: continue          # samma punkt
+            a = round(warp[-1][0] + 0.02, 3)       # håll tiderna strikt stigande
+        warp.append([a, b])
     captions.append({"scene": sc["id"], "t0": round(r0, 3), "t1": round(r1, 3), "words": words})
     out = {k: sc[k] for k in ("id", "tag", "title", "sub") if k in sc}
     out.update(t0=d0, t1=d1, caption=" ".join(clean(p) for p in sc["vo"] if not p.startswith("{pause")), real=[round(r0, 3), round(r1, 3)], marks={k: round(v, 3) for k, v in marks.items()})

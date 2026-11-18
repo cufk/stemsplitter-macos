@@ -6,3 +6,4 @@ vo_chunks/
 AppIcon.png
 timeline_real.json
 __pycache__/
+kokoro/

@@ -1,13 +1,13 @@
 #!/bin/sh
 # Bygger presentationsvideon: röst (Google TTS) → tidslinje → bildrutor → mp4.
 # Kräver: python3 med numpy, Node med Playwright (Chromium), ffmpeg.
-# Röst: GOOGLE_TTS_API_KEY i miljön (API-nyckel begränsad till Text-to-Speech API).
+# Röst: Kokoro lokalt (pip install kokoro-onnx), eller Google om GOOGLE_TTS_API_KEY finns.
 set -e
 cd "$(dirname "$0")"
 cp ../../Packaging/AppIcon.png AppIcon.png
 
 if [ ! -d vo_chunks ] || [ "${1:-}" = "--new-voice" ]; then
-    echo "==> Hämtar voice-over från Google Text-to-Speech"
+    echo "==> Skapar voice-over"
     python3 tts.py
 fi
 echo "==> Bygger tidslinjen från rösten"
