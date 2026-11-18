@@ -1,6 +1,7 @@
 #!/bin/sh
-# Bygger en fristående StemSplitter.app i build/
-# Anvandning: ./scripts/build-app.sh   (fran repo-roten eller var som helst)
+# Bygger en fristående StemSplitter.app och en dmg att dela i build/.
+# Användning: ./scripts/build-app.sh            universal-app (Apple Silicon + Intel)
+#             ./scripts/build-app.sh --native   bara den här Macens arkitektur (snabbare)
 set -e
 # pipefail så att ett fel i swift build inte döljs av tee
 set -o pipefail 2>/dev/null || true
@@ -8,8 +9,17 @@ set -o pipefail 2>/dev/null || true
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-echo "==> swift build -c release"
-if ! swift build -c release 2>&1 | tee "$ROOT/.build-release.log"; then
+ARCH_FLAGS="--arch arm64 --arch x86_64"
+[ "${1:-}" = "--native" ] && ARCH_FLAGS=""
+VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$ROOT/Packaging/Info.plist")
+
+build() {
+    # shellcheck disable=SC2086
+    swift build -c release $ARCH_FLAGS "$@"
+}
+
+echo "==> swift build -c release ${ARCH_FLAGS:-(egen arkitektur)} — version $VERSION"
+if ! build 2>&1 | tee "$ROOT/.build-release.log"; then
     # Efter en Xcode-/SDK-uppdatering kan de förbyggda systemmodulerna i .build vara inaktuella
     # ("unexpected variant during dependency scanning on module ..."). Rensa dem och försök en gång till.
     if grep -q "unexpected variant during dependency scanning" "$ROOT/.build-release.log"; then
@@ -19,23 +29,24 @@ if ! swift build -c release 2>&1 | tee "$ROOT/.build-release.log"; then
                "$ROOT/.build/out/SDKExplicitPrecompiledModules" \
                "$ROOT/.build/out/SDKStatCaches.noindex" \
                "$ROOT/.build/ModuleCache"
-        swift build -c release
+        build
     else
         rm -f "$ROOT/.build-release.log"
         exit 1
     fi
 fi
 rm -f "$ROOT/.build-release.log"
+BIN="$(build --show-bin-path)"
 
 APP="$ROOT/build/StemSplitter.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-
-cp "$ROOT/.build/release/StemSplitter" "$APP/Contents/MacOS/StemSplitter"
+cp "$BIN/StemSplitter" "$APP/Contents/MacOS/StemSplitter"
 cp "$ROOT/Packaging/Info.plist" "$APP/Contents/Info.plist"
+echo "    arkitekturer: $(lipo -archs "$APP/Contents/MacOS/StemSplitter")"
 
-# SPM-resursbunten (innehaller bootstrap.sh) maste med i Contents/Resources
-for bundle in "$ROOT"/.build/release/*.bundle; do
+# SPM-resursbunten (bootstrap.sh och ikonen) måste med i Contents/Resources
+for bundle in "$BIN"/*.bundle; do
     [ -e "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
 done
 
@@ -57,26 +68,28 @@ icon 512  AppIcon.png       icon_512x512.png
 icon 1024 AppIcon.png       icon_512x512@2x.png
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
-# Ad-hoc-signera sa Gatekeeper inte klagar (lokalt bruk)
-if command -v codesign >/dev/null 2>&1; then
-    codesign --force --deep --sign - "$APP"
-    if codesign --verify --deep --strict -v "$APP" 2>/dev/null; then
-        echo "==> Signatur verifierad (ad-hoc)"
-    else
-        echo "==> VARNING: signaturen kunde inte verifieras — Gatekeeper kan blockera appen"
-    fi
-fi
+# Ad-hoc-signatur (ingen Apple Developer-signering): vänner godkänner appen en gång, se "Läs mig först".
+codesign --force --deep --sign - "$APP"
+codesign --verify --deep --strict "$APP"
+echo "==> Signatur verifierad (ad-hoc)"
 
-# Ta bort quarantine om filen kommer fran nedladdning/overforing
-xattr -cr "$APP" 2>/dev/null || true
+# Självtest: startar den packade appen och kontrollerar att resurserna hittas
+echo "==> Självtest"
+"$APP/Contents/MacOS/StemSplitter" --self-test
 
-# Skapa DMG for enkel delning (innehaller hela .app)
-echo "==> Skapar StemSplitter.dmg"
-DMG="$ROOT/build/StemSplitter.dmg"
-rm -f "$DMG"
-hdiutil create -volname StemSplitter -srcfolder "$APP" -ov -format UDZO "$DMG" >/dev/null
+# dmg med appen, en genväg till Program och instruktioner
+echo "==> Skapar dmg"
+STAGE="$(mktemp -d)/StemSplitter"
+mkdir -p "$STAGE"
+cp -R "$APP" "$STAGE/"
+ln -s /Applications "$STAGE/Program"
+cp "$ROOT/Packaging/Läs mig först.txt" "$STAGE/"
+DMG="$ROOT/build/StemSplitter-$VERSION.dmg"
+rm -f "$ROOT"/build/StemSplitter*.dmg
+hdiutil create -volname "StemSplitter $VERSION" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+rm -rf "$(dirname "$STAGE")"
 
 echo "==> Klart:"
 echo "    $APP"
-echo "    $DMG"
-echo "    Starta lokalt med: open \"$APP\"  (forsta gangen: hogerklicka → Oppna om Gatekeeper klagar)"
+echo "    $DMG ($(du -h "$DMG" | cut -f1))"
+echo "    Starta lokalt med: open \"$APP\""

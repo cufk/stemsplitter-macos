@@ -25,6 +25,10 @@ struct StemSplitterApp: App {
     @StateObject private var viewModel = AppViewModel()
 
     init() {
+        // `StemSplitter --self-test`: kontrollerar att app-bunten är komplett (används av CI och build-app.sh)
+        if CommandLine.arguments.contains("--self-test") {
+            Self.runSelfTest()
+        }
         // Vid `swift run` finns ingen app-bunt med AppIcon.icns — visa ikonen i Dock ändå.
         // Bilden har redan macOS-form, marginal och skugga.
         if Bundle.main.object(forInfoDictionaryKey: "CFBundleIconFile") == nil,
@@ -32,6 +36,24 @@ struct StemSplitterApp: App {
            let image = NSImage(contentsOf: url) {
             NSApplication.shared.applicationIconImage = image
         }
+    }
+
+    private static func runSelfTest() -> Never {
+        var ok = true
+        func check(_ name: String, _ condition: Bool) {
+            print("\(condition ? "OK " : "FEL") \(name)")
+            ok = ok && condition
+        }
+        check("installationsskript (bootstrap.sh)", Bundle.module.url(forResource: "bootstrap", withExtension: "sh") != nil)
+        check("ikon (appicon.png)", Bundle.module.url(forResource: "appicon", withExtension: "png") != nil)
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        check("version i Info.plist (\(version ?? "saknas"))", version != nil)
+        #if arch(arm64)
+        print("arkitektur: arm64")
+        #else
+        print("arkitektur: x86_64")
+        #endif
+        exit(ok ? 0 : 1)
     }
 
     var body: some Scene {

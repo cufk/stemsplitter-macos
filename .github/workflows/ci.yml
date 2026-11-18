@@ -37,6 +37,24 @@ jobs:
       - name: Röktest av app-bunten
         run: |
           APP=build/StemSplitter.app
+          ARCHS=$(lipo -archs "$APP/Contents/MacOS/StemSplitter")
+          echo "Arkitekturer: $ARCHS"
+          echo "$ARCHS" | grep -q arm64
+          echo "$ARCHS" | grep -q x86_64
+          "$APP/Contents/MacOS/StemSplitter" --self-test
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then
+            echo "Självtest som Intel (Rosetta):"
+            arch -x86_64 "$APP/Contents/MacOS/StemSplitter" --self-test
+          else
+            echo "Rosetta saknas på runnern — Intel-delen testas inte här"
+          fi
+          DMG=$(ls build/StemSplitter-*.dmg)
+          hdiutil attach -nobrowse -mountpoint /tmp/ss-dmg "$DMG" >/dev/null
+          test -d "/tmp/ss-dmg/StemSplitter.app"
+          test -L "/tmp/ss-dmg/Program"
+          test -f "/tmp/ss-dmg/Läs mig först.txt"
+          hdiutil detach /tmp/ss-dmg >/dev/null
+          echo "dmg innehåller app, genväg till Program och instruktioner"
           test -x "$APP/Contents/MacOS/StemSplitter"
           test -f "$APP/Contents/Info.plist"
           test -f "$APP/Contents/Resources/AppIcon.icns"
@@ -66,7 +84,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: StemSplitter-${{ github.sha }}
-          path: build/StemSplitter.dmg
+          path: build/StemSplitter-*.dmg
           retention-days: 14
           if-no-files-found: error
 

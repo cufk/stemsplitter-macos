@@ -1,0 +1,28 @@
+StemSplitter — öva till dina låtar, stämma för stämma
+======================================================
+
+INSTALLERA
+1. Dra StemSplitter till mappen Program (genvägen i det här fönstret).
+2. Öppna StemSplitter från Program.
+
+FÖRSTA GÅNGEN DU ÖPPNAR APPEN
+Appen är inte registrerad hos Apple, så macOS frågar först om du litar på den:
+
+  macOS 15 och senare:
+    a) Öppna appen. macOS säger att den inte kan kontrollera den — klicka "Klar".
+    b) Öppna Systeminställningar → Integritet och säkerhet.
+    c) Scrolla ned och klicka "Öppna ändå" vid StemSplitter. Bekräfta med ditt lösenord.
+
+  macOS 14:
+    Högerklicka på StemSplitter i Program → Öppna → Öppna.
+
+Det behövs bara första gången.
+
+DET HÄR BEHÖVS
+- macOS 14 eller senare, Apple Silicon eller Intel.
+- Python 3.9–3.12. Saknas det erbjuder appen att ladda ner Python 3.12 från python.org.
+- Internet första gången du delar upp en låt: AI-modellen och PyTorch laddas ner (1–2 GB).
+  Därefter fungerar allt utan internet, och ingen musik lämnar din Mac.
+- Några GB ledigt utrymme för AI-miljön och dina separerade låtar.
+
+Använd bara musik som du har rätt att använda (egna inspelningar eller filer du har licens till).

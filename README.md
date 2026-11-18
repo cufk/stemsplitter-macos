@@ -68,26 +68,26 @@ Båda betyder samma sak: **tester kräver hela Xcode**, CLT räcker inte. Så h�
 
 Efter Xcode-installationen: `swift run` startar appen, `swift test` kör testerna.
 
-## Bygg en fristående .app
+## Bygg en fristående .app och dmg
 
 ```sh
-./scripts/build-app.sh
+./scripts/build-app.sh            # universal-app (Apple Silicon + Intel)
+./scripts/build-app.sh --native   # bara den här Macens arkitektur, snabbare
 open build/StemSplitter.app
 ```
 
-Skriptet gor aven `build/StemSplitter.dmg` (fardig att skicka till vänner). Mottagaren dubbelklickar dmg:n, drar appen till Program, och forsta gangen hogerklick → Oppna (eller `xattr -dr com.apple.quarantine /Applications/StemSplitter.app`).
+Skriptet bygger `build/StemSplitter.app` och `build/StemSplitter-<version>.dmg`, ad-hoc-signerar appen och
+kör ett självtest av den färdiga app-bunten (`StemSplitter --self-test`). dmg-filen innehåller appen, en
+genväg till Program och `Läs mig först.txt` med instruktioner på svenska. CI bygger samma dmg för varje
+commit (Artifacts → `StemSplitter-<sha>`).
 
-Skriptet kor `swift build -c release` och paketerar binären + `Packaging/Info.plist` + SPM-resursbunten (bootstrap.sh) till `build/StemSplitter.app`, ad-hoc-signar den och verifierar signaturen.
+### Dela med vänner
 
-Om Gatekeeper ändå blockerar (t.ex. efter att appen kopierats/nedladdats, `spctl --assess` säger "rejected"):
+Appen är inte signerad med ett Apple Developer-ID, så macOS frågar första gången:
+- **macOS 15 och senare:** öppna appen → "Klar" → Systeminställningar → Integritet och säkerhet → "Öppna ändå".
+- **macOS 14:** högerklicka på appen → Öppna → Öppna.
 
-```sh
-xattr -cr build/StemSplitter.app
-codesign --force --deep --sign - build/StemSplitter.app
-open build/StemSplitter.app
-```
-
-Forsta gangen kan du också behöva högerklicka på appen → **Öppna** (eller Systeminställningar → Integritet och säkerhet → "Öppna ändå"). För notarering/distribution utanför din egen Mac krävs ett Apple Developer-konto (Xcode → Product → Archive).
+För att slippa det steget krävs Apple Developer-medlemskap (Developer ID-signering och notarisering).
 
 ## Appikon
 
