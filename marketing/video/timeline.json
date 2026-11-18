@@ -1,0 +1,268 @@
+{
+ "fps": 30,
+ "duration": 68,
+ "segments": [
+  [
+   0,
+   38,
+   0,
+   1.0,
+   0
+  ],
+  [
+   38,
+   42,
+   38,
+   0.75,
+   0
+  ],
+  [
+   42,
+   46,
+   41,
+   0.75,
+   2
+  ],
+  [
+   46,
+   68,
+   44,
+   1.0,
+   0
+  ]
+ ],
+ "master": [
+  [
+   0,
+   0
+  ],
+  [
+   1.2,
+   0.9
+  ],
+  [
+   5.5,
+   0.9
+  ],
+  [
+   6.2,
+   0.32
+  ],
+  [
+   12,
+   0.32
+  ],
+  [
+   12.6,
+   0.2
+  ],
+  [
+   19.4,
+   0.2
+  ],
+  [
+   20.2,
+   0.95
+  ],
+  [
+   54,
+   0.95
+  ],
+  [
+   54.6,
+   0.6
+  ],
+  [
+   61,
+   0.6
+  ],
+  [
+   61.6,
+   0.95
+  ],
+  [
+   66,
+   0.95
+  ],
+  [
+   68,
+   0
+  ]
+ ],
+ "stems": {
+  "vocals": [
+   [
+    0,
+    1
+   ],
+   [
+    30.0,
+    1
+   ],
+   [
+    30.12,
+    0
+   ],
+   [
+    33.5,
+    0
+   ],
+   [
+    33.62,
+    1
+   ],
+   [
+    34.6,
+    1
+   ],
+   [
+    34.72,
+    0
+   ],
+   [
+    37.4,
+    0
+   ],
+   [
+    37.52,
+    1
+   ]
+  ],
+  "drums": [
+   [
+    0,
+    1
+   ]
+  ],
+  "bass": [
+   [
+    0,
+    1
+   ],
+   [
+    30.0,
+    1
+   ],
+   [
+    30.12,
+    0
+   ],
+   [
+    33.5,
+    0
+   ],
+   [
+    33.62,
+    1
+   ]
+  ],
+  "other": [
+   [
+    0,
+    1
+   ],
+   [
+    30.0,
+    1
+   ],
+   [
+    30.12,
+    0
+   ],
+   [
+    33.5,
+    0
+   ],
+   [
+    33.62,
+    1
+   ]
+  ]
+ },
+ "click": {
+  "from": 48.0,
+  "to": 54.0,
+  "videoStart": 46,
+  "songStart": 44
+ },
+ "scenes": [
+  {
+   "id": "intro",
+   "t0": 0,
+   "t1": 5.5,
+   "caption": "Öva till dina favoritlåtar – stem för stem."
+  },
+  {
+   "id": "drop",
+   "t0": 5.5,
+   "t1": 12,
+   "tag": "Kom igång",
+   "title": "Dra in en låt",
+   "sub": "MP3, M4A, WAV, AIFF eller FLAC – från din egen Mac.",
+   "caption": "Dra in en låt du har rätt att använda, så sätter appen igång."
+  },
+  {
+   "id": "separate",
+   "t0": 12,
+   "t1": 19.5,
+   "tag": "Lokal AI",
+   "title": "Delas upp på din Mac",
+   "sub": "Demucs körs lokalt på GPU:n. Ingen musik lämnar datorn.",
+   "caption": "AI:n delar upp låten helt lokalt – inget laddas upp någonstans."
+  },
+  {
+   "id": "lanes",
+   "t0": 19.5,
+   "t1": 28,
+   "tag": "Fyra spår",
+   "title": "Sång, trummor, bas och övrigt",
+   "sub": "Följ hela låten på en tidslinje – klicka var som helst för att hoppa.",
+   "caption": "Varje del av låten får ett eget spår, i sin egen färg."
+  },
+  {
+   "id": "mix",
+   "t0": 28,
+   "t1": 38,
+   "tag": "Mix",
+   "title": "Solo, mute och volym",
+   "sub": "Lyssna bara på trummorna – eller ta bort sången och sjung själv.",
+   "caption": "Lyssna bara på trummorna, eller tysta sången och sjung själv."
+  },
+  {
+   "id": "tuning",
+   "t0": 38,
+   "t1": 46,
+   "tag": "Övning",
+   "title": "Tempo och tonläge",
+   "sub": "Sakta ner utan att tonen ändras. Byt tonart utan att tempot ändras.",
+   "caption": "Sakta ner till 75 procent – och höj två halvtoner till din röst."
+  },
+  {
+   "id": "click",
+   "t0": 46,
+   "t1": 54,
+   "tag": "Nytt",
+   "title": "Klick som följer låten",
+   "sub": "Tempot och taktettorna hittas i trumspåret – klicket följer med i alla tempon.",
+   "caption": "Appen hittar tempot i trummorna, och klicket ligger alltid på slaget."
+  },
+  {
+   "id": "export",
+   "t0": 54,
+   "t1": 61,
+   "tag": "Och mer",
+   "title": "Spara mixen, öppna igen",
+   "sub": "Exportera din egen mix som WAV. Tidigare låtar öppnas direkt.",
+   "caption": "Spara din egen mix, och öppna tidigare låtar direkt."
+  },
+  {
+   "id": "outro",
+   "t0": 61,
+   "t1": 68,
+   "caption": "StemSplitter för macOS. Helt lokalt – helt ditt."
+  }
+ ],
+ "voiceover": {
+  "gain": 2.6
+ }
+}
