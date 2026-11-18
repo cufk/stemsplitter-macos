@@ -30,7 +30,10 @@ final class SeparationService: @unchecked Sendable {
     enum Progress: Sendable {
         case preparing(String)
         case converting(Double)
-        case separating(Double?, onGPU: Bool)
+        /// Nedladdning av modellvikter första gången en modell används.
+        case downloadingModel(Double)
+        /// Samlat förlopp över alla modellomgångar.
+        case separating(Double?, pass: Int, passes: Int, onGPU: Bool)
         case retryingOnCPU
     }
 
@@ -148,9 +151,11 @@ final class SeparationService: @unchecked Sendable {
         progress: @escaping @Sendable (Progress) -> Void
     ) async throws {
         let onGPU = device == "mps"
-        progress(.separating(nil, onGPU: onGPU))
-        log("Startar demucs -n \(model) -d \(device) \(input.lastPathComponent)")
+        let expectedPasses = SeparationModel(rawValue: model)?.passes ?? 1
+        progress(.preparing("Startar Demucs…"))
+        log("Startar demucs -n \(model) -d \(device) \(input.lastPathComponent) (\(expectedPasses) omgång(ar))")
         let throttle = LockedThrottle()
+        let tracker = LockedPassTracker(expectedPasses: expectedPasses)
         do {
             try await ProcessRunner.run(
                 executable: demucsURL,
@@ -159,10 +164,17 @@ final class SeparationService: @unchecked Sendable {
                 arguments: ["-n", model, "-d", device, "--float32", "-o", output.path, input.path],
                 environment: Self.environment,
                 onLine: { line in
-                    if let fraction = ProgressParser.fraction(fromLine: line) {
-                        if throttle.accept(fraction) { progress(.separating(fraction, onGPU: onGPU)) }
-                        if throttle.shouldLog(fraction) { log("demucs \(Int(fraction * 100)) %") }
-                    } else {
+                    switch ProgressParser.classify(line) {
+                    case .separation(let fraction):
+                        let (overall, pass, passes, newPass) = tracker.update(fraction)
+                        if newPass { log("demucs: modell \(pass) av \(passes)") }
+                        if throttle.accept(overall) {
+                            progress(.separating(overall, pass: pass, passes: passes, onGPU: onGPU))
+                        }
+                        if throttle.shouldLog(overall) { log("demucs \(Int(overall * 100)) % (modell \(pass) av \(passes))") }
+                    case .download(let fraction):
+                        progress(.downloadingModel(fraction))
+                    case .other:
                         log("demucs: \(line)")
                     }
                 }
@@ -243,5 +255,23 @@ private final class LockedThrottle: @unchecked Sendable {
         guard decile != lastLogged else { return false }
         lastLogged = decile
         return true
+    }
+}
+
+/// Trådsäker sammanslagning av Demucs modellomgångar till ett förlopp.
+private final class LockedPassTracker: @unchecked Sendable {
+    private let lock = NSLock()
+    private var progress: PassProgress
+
+    init(expectedPasses: Int) {
+        progress = PassProgress(expectedPasses: expectedPasses)
+    }
+
+    /// Samlat förlopp, aktuell omgång (från 1), antal omgångar och om en ny omgång just började.
+    func update(_ fraction: Double) -> (Double, Int, Int, Bool) {
+        lock.lock(); defer { lock.unlock() }
+        let before = progress.passNumber
+        let overall = progress.update(fraction)
+        return (overall, progress.passNumber, progress.passes, progress.passNumber != before)
     }
 }

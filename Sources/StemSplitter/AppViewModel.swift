@@ -172,9 +172,12 @@ final class AppViewModel: ObservableObject {
                         self.setStage(.preparing, message)
                     case .converting(let fraction):
                         self.setStage(.converting, "Konverterar till WAV så att Demucs kan läsa filen…", progress: fraction)
-                    case .separating(let fraction, let onGPU):
-                        let message = "Delar upp i sång, trummor, bas och övrigt på \(onGPU ? "GPU" : "CPU")…"
-                        self.setStage(.separating, message, progress: fraction ?? (self.stage == .separating ? self.progressFraction : nil))
+                    case .downloadingModel(let fraction):
+                        self.setStage(.preparing, "Laddar ner AI-modellen (bara första gången)… \(Int(fraction * 100)) %")
+                    case .separating(let fraction, let pass, let passes, let onGPU):
+                        var message = "Delar upp i sång, trummor, bas och övrigt på \(onGPU ? "GPU" : "CPU")"
+                        if passes > 1 { message += " · modell \(pass) av \(passes)" }
+                        self.setStage(.separating, message + "…", progress: fraction ?? (self.stage == .separating ? self.progressFraction : nil))
                     case .retryingOnCPU:
                         self.setStage(.separating, "GPU:n klarade inte låten — kör om på CPU (tar längre tid)…", progress: nil)
                     }

@@ -25,6 +25,14 @@ public enum SeparationModel: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// Hur många modeller Demucs kör efter varandra (varje med eget förlopp 0→100 %).
+    public var passes: Int {
+        switch self {
+        case .standard: return 1
+        case .best: return 4
+        }
+    }
+
     public static func from(defaultsValue: String?) -> SeparationModel {
         defaultsValue.flatMap(SeparationModel.init(rawValue:)) ?? .standard
     }
