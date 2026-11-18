@@ -39,20 +39,22 @@ for bundle in "$ROOT"/.build/release/*.bundle; do
     [ -e "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
 done
 
-# Bygg AppIcon.icns fran Packaging/AppIcon.jpg, med rundade hörn bakade i bilden
-echo "==> Genererar AppIcon.icns (rundade hörn)"
+# Bygg AppIcon.icns från färdiga PNG-filer (form, marginal och skugga finns redan i bilden).
+# De minsta storlekarna använder en förenklad variant så att de syns i menyrader och Finder-listor.
+echo "==> Genererar AppIcon.icns"
 ICONSET="$(mktemp -d)/AppIcon.iconset"
 mkdir -p "$ICONSET"
-if swift "$ROOT/scripts/round-icon.swift" "$ROOT/Packaging/AppIcon.jpg" "$ICONSET" 2>/dev/null \
-   && [ -f "$ICONSET/icon_512x512@2x.png" ]; then
-    : # rundade ikoner klara
-else
-    echo "    ( föll tillbaka på sips utan rundning )"
-    for size in 16 32 128 256 512; do
-        sips -z "$size" "$size" -s format png "$ROOT/Packaging/AppIcon.jpg" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
-        sips -z "$((size * 2))" "$((size * 2))" -s format png "$ROOT/Packaging/AppIcon.jpg" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
-    done
-fi
+icon() { sips -z "$1" "$1" -s format png "$ROOT/Packaging/$2" --out "$ICONSET/$3" >/dev/null; }
+icon 16   AppIcon-small.png icon_16x16.png
+icon 32   AppIcon-small.png icon_16x16@2x.png
+icon 32   AppIcon-small.png icon_32x32.png
+icon 64   AppIcon.png       icon_32x32@2x.png
+icon 128  AppIcon.png       icon_128x128.png
+icon 256  AppIcon.png       icon_128x128@2x.png
+icon 256  AppIcon.png       icon_256x256.png
+icon 512  AppIcon.png       icon_256x256@2x.png
+icon 512  AppIcon.png       icon_512x512.png
+icon 1024 AppIcon.png       icon_512x512@2x.png
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
 # Ad-hoc-signera sa Gatekeeper inte klagar (lokalt bruk)

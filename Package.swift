@@ -24,7 +24,7 @@ let package = Package(
             path: "Sources/StemSplitter",
             resources: [
                 .process("Resources/bootstrap.sh"),
-                .process("Resources/appicon.jpg")
+                .process("Resources/appicon.png")
             ]
         ),
         .testTarget(

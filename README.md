@@ -89,6 +89,12 @@ open build/StemSplitter.app
 
 Forsta gangen kan du också behöva högerklicka på appen → **Öppna** (eller Systeminställningar → Integritet och säkerhet → "Öppna ändå"). För notarering/distribution utanför din egen Mac krävs ett Apple Developer-konto (Xcode → Product → Archive).
 
+## Appikon
+
+Ikonen ritas som SVG i `Packaging/icon/AppIcon.html` (fyra spår i stemfärgerna med ett spelhuvud, i appens formspråk).
+`Packaging/AppIcon.png` används för 64 px och uppåt, `Packaging/AppIcon-small.png` (färre, tjockare staplar) för 16–32 px.
+Efter ändringar i källan: `node scripts/render-icon.js` (kräver Node och Playwright). `build-app.sh` bygger `AppIcon.icns` från PNG-filerna.
+
 ## CI och dev-agent
 
 - `.github/workflows/ci.yml` körs vid push till alla brancher: `swift build`, `swift test`, bygger `.app`/`.dmg` med röktest, sammanfattar kompilatorvarningar och laddar upp `StemSplitter.dmg` som artifact. Dev-agentens Python-tester körs i ett eget jobb.
