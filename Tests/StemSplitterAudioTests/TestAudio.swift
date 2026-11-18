@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+@testable import StemSplitterAudio
 
 /// Hjälpfunktioner som skapar riktiga ljudfiler för testerna.
 enum TestAudio {
@@ -30,7 +31,7 @@ enum TestAudio {
                 AVEncoderBitRateKey: 64000
             ]
         } else {
-            settings = processing.settings
+            settings = processing.fileSettings
         }
         let frames = AVAudioFrameCount(seconds * sampleRate)
         let buffer = AVAudioPCMBuffer(pcmFormat: processing, frameCapacity: frames)!

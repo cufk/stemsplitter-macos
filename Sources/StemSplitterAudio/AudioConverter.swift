@@ -39,7 +39,7 @@ public enum AudioConverter {
         do {
             let destinationFile = try AVAudioFile(
                 forWriting: destination,
-                settings: format.settings,
+                settings: format.fileSettings,
                 commonFormat: format.commonFormat,
                 interleaved: false
             )

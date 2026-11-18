@@ -23,7 +23,7 @@ struct BeatAnalyzerTests {
             }
             t += 60 / bpm
         }
-        let file = try AVAudioFile(forWriting: url, settings: format.settings, commonFormat: .pcmFormatFloat32, interleaved: false)
+        let file = try AVAudioFile(forWriting: url, settings: format.fileSettings, commonFormat: .pcmFormatFloat32, interleaved: false)
         try file.write(from: buffer)
         return times
     }

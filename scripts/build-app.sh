@@ -2,12 +2,30 @@
 # Bygger en fristående StemSplitter.app i build/
 # Anvandning: ./scripts/build-app.sh   (fran repo-roten eller var som helst)
 set -e
+# pipefail så att ett fel i swift build inte döljs av tee
+set -o pipefail 2>/dev/null || true
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 echo "==> swift build -c release"
-swift build -c release
+if ! swift build -c release 2>&1 | tee "$ROOT/.build-release.log"; then
+    # Efter en Xcode-/SDK-uppdatering kan de förbyggda systemmodulerna i .build vara inaktuella
+    # ("unexpected variant during dependency scanning on module ..."). Rensa dem och försök en gång till.
+    if grep -q "unexpected variant during dependency scanning" "$ROOT/.build-release.log"; then
+        echo "==> Inaktuell modulcache (troligen efter Xcode-uppdatering) — rensar och bygger om"
+        rm -rf "$ROOT/.build/out/ModuleCache.noindex" \
+               "$ROOT/.build/out/Intermediates.noindex/SwiftExplicitPrecompiledModules" \
+               "$ROOT/.build/out/SDKExplicitPrecompiledModules" \
+               "$ROOT/.build/out/SDKStatCaches.noindex" \
+               "$ROOT/.build/ModuleCache"
+        swift build -c release
+    else
+        rm -f "$ROOT/.build-release.log"
+        exit 1
+    fi
+fi
+rm -f "$ROOT/.build-release.log"
 
 APP="$ROOT/build/StemSplitter.app"
 rm -rf "$APP"

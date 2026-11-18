@@ -11,7 +11,7 @@ struct StemResidualTests {
         for channel in 0..<2 {
             for (i, value) in samples.enumerated() { buffer.floatChannelData![channel][i] = value }
         }
-        let file = try AVAudioFile(forWriting: url, settings: format.settings, commonFormat: .pcmFormatFloat32, interleaved: false)
+        let file = try AVAudioFile(forWriting: url, settings: format.fileSettings, commonFormat: .pcmFormatFloat32, interleaved: false)
         try file.write(from: buffer)
     }
 

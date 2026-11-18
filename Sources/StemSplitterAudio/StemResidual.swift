@@ -44,7 +44,7 @@ public enum StemResidual {
         var mixEnergy = 0.0
         var missingEnergy = 0.0
         do {
-            let output = try AVAudioFile(forWriting: temporary, settings: format.settings, commonFormat: .pcmFormatFloat32, interleaved: false)
+            let output = try AVAudioFile(forWriting: temporary, settings: format.fileSettings, commonFormat: .pcmFormatFloat32, interleaved: false)
             let length = min(mixFile.length, stemFiles.map(\.length).min() ?? mixFile.length, oldTarget.length)
             var position: AVAudioFramePosition = 0
             while position < length {

@@ -90,7 +90,7 @@ public enum MixerExporter {
         do {
             let output = try AVAudioFile(
                 forWriting: outputURL,
-                settings: format.settings,
+                settings: format.fileSettings,
                 commonFormat: .pcmFormatFloat32,
                 interleaved: false
             )
