@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<style>
+:root{
+  --bg:#ECECEE; --card:#fff; --subtle:#F4F4F5; --fill:#E1E1E3; --ink:#141414; --ink2:#737373;
+  --accent:#ED5429; --solo:#FACCBC; --shadow:0 2px 10px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --vocals:#ED5429; --drums:#F5A623; --bass:#8C6BF2; --other:#29AD9E;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);font-family:Inter,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+#stage{position:absolute;inset:0;overflow:hidden;background:var(--bg)}
+.disp{font-family:'Inter Display',Inter,sans-serif}
+/* Scenrubriker */
+#head{position:absolute;left:160px;top:72px;width:1600px}
+#tag{display:inline-block;background:#FBE1D8;color:var(--accent);font-weight:700;font-size:20px;letter-spacing:2px;text-transform:uppercase;padding:9px 18px;border-radius:999px}
+#title{font-family:'Inter Display';font-weight:700;font-size:86px;letter-spacing:-2.5px;margin-top:22px;line-height:1}
+#sub{font-size:30px;color:var(--ink2);margin-top:18px;letter-spacing:-.2px}
+/* Undertext */
+#caption{position:absolute;left:50%;bottom:46px;transform:translateX(-50%);background:rgba(20,20,20,.88);color:rgba(255,255,255,.42);font-size:26px;font-weight:500;padding:14px 28px;border-radius:999px;white-space:nowrap;letter-spacing:-.2px}
+#caption b{font-weight:500;color:#fff}
+/* Appfönstret (naturlig storlek 1600×920, flyttas/skalas som kamera) */
+#win{position:absolute;left:0;top:0;width:1780px;height:700px;border-radius:22px;background:var(--bg);box-shadow:0 30px 80px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.06);overflow:hidden;transform-origin:0 0}
+.lights{position:absolute;left:22px;top:20px;display:flex;gap:9px}.lights i{width:13px;height:13px;border-radius:50%;display:block}
+.hdr{position:absolute;left:28px;right:28px;top:44px;height:44px;display:flex;align-items:center;justify-content:space-between}
+.circ{width:44px;height:44px;border-radius:50%;background:var(--card);box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center}
+.circ svg{width:19px;height:19px}
+.hdr .mid{text-align:center}.hdr .t1{font-weight:600;font-size:18px}.hdr .t2{font-size:13px;color:var(--ink2);margin-top:3px;font-variant-numeric:tabular-nums}
+.content{position:absolute;left:28px;right:28px;top:106px;bottom:24px}
+/* tomt läge / arbete */
+.center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.emptycard{width:540px;padding:48px 40px;border-radius:26px;background:var(--card);box-shadow:var(--shadow);text-align:center;border:2px dashed transparent}
+.plus{width:68px;height:68px;border-radius:50%;background:var(--ink);margin:0 auto 20px;display:flex;align-items:center;justify-content:center}
+.emptycard h3{font-size:22px;font-weight:600}.emptycard p{color:var(--ink2);font-size:15px;margin-top:10px;line-height:1.45}
+.workcard{width:480px;padding:36px;border-radius:26px;background:var(--card);box-shadow:var(--shadow);text-align:center}
+.pct{font-family:'Inter Display';font-size:56px;font-weight:600;font-variant-numeric:tabular-nums;margin:18px 0 12px}
+.bar{height:7px;border-radius:9px;background:var(--subtle);overflow:hidden;width:340px;margin:0 auto}.bar i{display:block;height:100%;background:var(--accent);border-radius:9px}
+.stages{width:340px;margin:22px auto 0;text-align:left}.stage{display:flex;align-items:center;gap:10px;font-size:15px;margin:9px 0}
+.dot{width:18px;height:18px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center}
+/* spår */
+.tl{position:absolute;left:0;right:0;top:0;bottom:96px;display:flex;gap:16px}
+.heads{width:196px;flex:none;padding-top:26px}
+.lh{display:flex;align-items:center;gap:10px}
+.ic{width:34px;height:34px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center}
+.lh .nm{font-weight:600;font-size:15px}
+.chip{width:22px;height:18px;border-radius:5px;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;background:var(--subtle);color:var(--ink2);margin-left:4px}
+.mini{position:relative;height:4px;border-radius:4px;background:var(--fill);flex:1;margin-top:9px}.mini i{position:absolute;left:0;top:0;bottom:0;border-radius:4px}.mini b{position:absolute;top:-4px;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid}
+.lanes{position:relative;flex:1}
+.ruler{height:26px;position:relative;font-size:11px;color:var(--ink2);font-variant-numeric:tabular-nums}
+.ruler span{position:absolute;top:6px;transform:translateX(-50%)}
+canvas#lanes{display:block;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.06);background:#fff}
+.ph{position:absolute;top:0;width:2px;background:var(--ink)}.ph::before{content:"";position:absolute;left:-3.5px;top:17px;width:9px;height:9px;border-radius:50%;background:var(--ink)}
+/* transport */
+.tp{position:absolute;left:0;right:0;bottom:0;height:72px;border-radius:20px;background:var(--card);box-shadow:var(--shadow);display:flex;align-items:center;padding:0 20px}
+.tp .time{flex:1;font-size:15px;font-variant-numeric:tabular-nums}.tp .time span{color:var(--ink2)}
+.tp .ctr{display:flex;align-items:center;gap:16px}
+.tgl{width:34px;height:34px;border-radius:50%;background:var(--subtle);display:flex;align-items:center;justify-content:center}
+.play{width:50px;height:50px;border-radius:50%;background:var(--ink);display:flex;align-items:center;justify-content:center}
+.tp .chips{flex:1;display:flex;justify-content:flex-end;gap:8px}
+.vchip{padding:6px 12px;border-radius:10px;background:var(--subtle);min-width:84px}.vchip .k{font-size:9px;font-weight:700;letter-spacing:.6px;color:var(--ink2)}.vchip .v{font-size:15px;font-weight:500;font-variant-numeric:tabular-nums}
+.pop{position:absolute;width:280px;padding:16px;border-radius:14px;background:var(--card);box-shadow:0 12px 40px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.05)}
+.pop h4{display:flex;justify-content:space-between;font-size:16px}.pop h4 span{font-weight:400;color:var(--ink2);font-variant-numeric:tabular-nums}
+.presets{display:flex;gap:6px;margin-top:12px}.presets i{font-style:normal;font-size:12px;font-weight:600;padding:5px 9px;border-radius:999px;background:var(--subtle)}
+.menu{position:absolute;width:250px;padding:6px;border-radius:12px;background:rgba(250,250,250,.98);box-shadow:0 12px 40px rgba(0,0,0,.2),0 0 0 1px rgba(0,0,0,.06);font-size:14px}
+.menu div{padding:6px 12px;border-radius:7px}.menu hr{border:0;border-top:1px solid var(--fill);margin:5px 8px}
+.libitem{display:flex;justify-content:space-between;align-items:center;padding:9px 14px;font-size:14px}.libitem small{display:block;color:var(--ink2);font-size:12px;margin-top:2px}
+.pill{position:absolute;padding:10px 16px;border-radius:14px;background:var(--card);box-shadow:var(--shadow);font-size:14px;display:flex;align-items:center;gap:10px}
+/* intro/outro */
+#intro,#outro{position:absolute;inset:0}
+.wordmark{font-family:'Inter Display';font-weight:800;letter-spacing:-6px}
+#cursor{position:absolute;left:0;top:0;width:34px;height:34px;pointer-events:none;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3));transform-origin:4px 4px}
+.ripple{position:absolute;border-radius:50%;border:3px solid var(--accent);pointer-events:none}
+.file{position:absolute;display:flex;align-items:center;gap:12px;padding:12px 18px 12px 12px;border-radius:14px;background:#fff;box-shadow:0 14px 34px rgba(0,0,0,.2);font-size:17px;font-weight:600}
+.file .fi{width:38px;height:46px;border-radius:7px;background:linear-gradient(#F26A44,#ED5429);display:flex;align-items:center;justify-content:center}
+.tilt{position:absolute;border-radius:18px;background:#fff;box-shadow:0 20px 50px rgba(0,0,0,.12);padding:16px}
+</style></head>
+<body><div id="stage">
+  <div id="intro"></div>
+  <div id="head"><span id="tag"></span><div id="title"></div><div id="sub"></div></div>
+  <div id="view" style="position:absolute;left:160px;top:330px;width:1600px;height:630px;overflow:hidden;border-radius:22px">
+  <div id="win">
+    <div class="lights"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i></div>
+    <div class="hdr">
+      <div style="display:flex;gap:12px"><div class="circ" id="btnHistory"></div><div class="circ" id="btnPlus"></div></div>
+      <div class="mid"><div class="t1" id="hTitle">StemSplitter</div><div class="t2" id="hSub">Lokal stem-separering</div></div>
+      <div class="circ" id="btnMore"></div>
+    </div>
+    <div class="content" id="content"></div>
+  </div></div>
+  <div id="outro"></div>
+  <div id="caption"></div>
+  <div id="fx"></div>
+  <svg id="cursor" viewBox="0 0 34 34"><path d="M5 3 L5 27 L11 21.5 L15.5 31 L19.5 29.2 L15 20 L23 20 Z" fill="#141414" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>
+</div>
+<script>
+// ------------------------------------------------------------------ data
+const TL = window.TIMELINE, PK = window.PEAKS;
+const STEMS = [
+  {id:'vocals', name:'Vocals',    color:'#ED5429', icon:'mic'},
+  {id:'drums',  name:'Drums', color:'#F5A623', icon:'metro'},
+  {id:'bass',   name:'Bass',     color:'#8C6BF2', icon:'guitar'},
+  {id:'other',  name:'Other',  color:'#29AD9E', icon:'keys'},
+];
+// normalisera varje stems vågform för visning
+const PEAKS = {}; for (const s of STEMS){ const p = PK.peaks[s.id], m = Math.max(...p); PEAKS[s.id] = p.map(v => Math.max(0.03, v / m)); }
+const SONG_LEN = PK.duration, BPM = PK.bpm;
+
+// ------------------------------------------------------------------ hjälp
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x));
+const ease=x=>{x=clamp(x);return x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2};
+const easeOut=x=>1-Math.pow(1-clamp(x),3);
+const lerp=(a,b,x)=>a+(b-a)*x;
+function kf(t, pts, fn=ease){ // [[t,v],...] v tal eller array
+  if (t<=pts[0][0]) return pts[0][1];
+  for (let i=1;i<pts.length;i++){ if (t<=pts[i][0]){ const [t0,v0]=pts[i-1],[t1,v1]=pts[i]; const x=fn((t-t0)/(t1-t0)); return Array.isArray(v0)? v0.map((v,j)=>lerp(v,v1[j],x)) : lerp(v0,v1,x);} }
+  return pts[pts.length-1][1];
+}
+const fmt=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+const $=id=>document.getElementById(id);
+const ICON = {
+  history:'<svg viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  plusW:'<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  more:'<svg viewBox="0 0 24 24" fill="#141414"><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></svg>',
+  mic:c=>`<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="${c}" stroke-width="2.3" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>`,
+  metro:c=>`<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="${c}" stroke-width="2.3" stroke-linejoin="round" stroke-linecap="round"><path d="M9 3h6l4 18H5z"/><path d="M12 15l5-9"/></svg>`,
+  guitar:c=>`<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="${c}" stroke-width="2.3" stroke-linecap="round"><path d="M14 10l6-6M17 4l3 3"/><path d="M10.5 9.5a4 4 0 0 0-6 1.5c-1.5 3 1.5 6.5 4.5 5 1.5 2 5 1.5 5-1.5a4 4 0 0 0-3.5-5z"/></svg>`,
+  keys:c=>`<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="${c}" stroke-width="2.2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5v9M12 5v9M16 5v9" /></svg>`,
+  repeat:c=>`<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg>`,
+  back:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#141414" stroke-width="2.3" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.5"/><path d="M4 4v4.5h4.5"/><text x="12" y="15.5" font-size="8" font-weight="800" text-anchor="middle" fill="#141414" stroke="none" font-family="Inter">5</text></svg>',
+  fwd:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#141414" stroke-width="2.3" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.7L20 8.5"/><path d="M20 4v4.5h-4.5"/><text x="12" y="15.5" font-size="8" font-weight="800" text-anchor="middle" fill="#141414" stroke="none" font-family="Inter">5</text></svg>',
+  play:'<svg viewBox="0 0 24 24" width="20" height="20" fill="#fff"><path d="M8 5.5v13l11-6.5z"/></svg>',
+  pause:'<svg viewBox="0 0 24 24" width="20" height="20" fill="#fff"><rect x="6.5" y="5" width="4" height="14" rx="1"/><rect x="13.5" y="5" width="4" height="14" rx="1"/></svg>',
+  check:'<svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="11" fill="#ED5429"/><path d="M7 12.5l3.2 3L17 9" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  note:'<svg viewBox="0 0 24 24" width="20" height="20" fill="#fff"><path d="M9 17.5V6l10-2v11.5" fill="none" stroke="#fff" stroke-width="2.2"/><circle cx="6.5" cy="17.5" r="2.6"/><circle cx="16.5" cy="15.5" r="2.6"/></svg>',
+  speaker:'<svg viewBox="0 0 24 24" width="16" height="16" fill="#ED5429"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="#ED5429" stroke-width="2" stroke-linecap="round"/></svg>',
+  lock:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#141414" stroke-width="2.2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+};
+$('btnHistory').innerHTML=ICON.history; $('btnPlus').innerHTML=ICON.plus; $('btnMore').innerHTML=ICON.more;
+
+// ------------------------------------------------------------------ låttid (samma segment som ljudet)
+function songTime(t){ for (const [t0,t1,s0,rate] of TL.segments){ if (t>=t0 && t<t1) return s0+(t-t0)*rate; } const l=TL.segments.at(-1); return l[2]+(l[1]-l[0])*l[3]; }
+function sceneAt(t){ return TL.scenes.find(s=>t>=s.t0 && t<s.t1) || TL.scenes.at(-1); }
+// Klickets slag i videotid (som i mix.py)
+const BEAT=60/BPM, CLICKS=[]; { const c=TL.click; for(let k=0;;k++){ const vt=c.videoStart+(k*BEAT-c.songStart); if (vt>=c.to) break; if (vt>=c.from) CLICKS.push([vt,k%4===0]); } }
+
+// ------------------------------------------------------------------ tillstånd per tidpunkt
+const between=(t,a,b)=>t>=a&&t<b;
+function state(t){
+  const s={};
+  s.mode = t<11.6 ? 'empty' : t<19.5 ? 'work' : 'player';
+  s.dropHover = between(t,8.6,9.9); s.dropped = t>=9.9;
+  s.work = clamp((t-12.4)/6.0);
+  s.solo = {drums: between(t,30.05,33.55)};
+  s.mute = {vocals: between(t,34.65,37.45)};
+  s.bassVol = kf(t,[[35.4,1],[36.3,0.6],[37.6,0.6],[37.9,1]]);
+  s.tempo = t>=39.05 && t<46 ? 0.75 : 1;   // förval 75 % klickas; återställs när klickscenen börjar
+  s.pitch = t>=42.05 && t<46 ? (t>=42.5?2:1) : 0;
+  if (t>=61){ s.tempo=1; s.pitch=0; }
+  s.tempoPop = between(t,38.45,41.2); s.pitchPop = between(t,41.75,44.6);
+  s.grid = t>=47.0; s.analyzing = between(t,46.0,47.0);
+  s.click = between(t,48.0,54.2);
+  s.menu = between(t,54.75,55.6);
+  s.export = clamp((t-55.7)/2.0); s.exportDone = t>=57.7 && t<61;
+  s.lib = between(t,58.6,60.9);
+  s.playing = t>=20.3;
+  return s;
+}
+
+// ------------------------------------------------------------------ appens innehåll
+function laneHeads(s){
+  return STEMS.map(st=>{
+    const muted = s.mute[st.id], solo = s.solo[st.id];
+    const vol = st.id==='bass'? s.bassVol : 1;
+    const ic = muted? `background:var(--subtle)` : `background:${st.color}`;
+    return `<div class="lh" id="lh-${st.id}" style="height:var(--lh)">
+      <div class="ic" style="${ic}">${ICON[st.icon](muted?'#737373':'#fff')}</div>
+      <div style="flex:1">
+        <div style="display:flex;align-items:center"><span class="nm" style="color:${muted?'#737373':'#141414'}">${st.name}</span><span style="flex:1"></span>
+          <span class="chip" id="m-${st.id}" style="${muted?'background:#141414;color:#fff':''}">M</span><span class="chip" id="s-${st.id}" style="${solo?`background:${st.color};color:#fff`:''}">S</span></div>
+        <div style="display:flex;align-items:center;gap:8px"><div class="mini" id="vol-${st.id}"><i style="width:${vol/1.5*100}%;background:${muted?'#737373':st.color}"></i><b style="left:calc(${vol/1.5*100}% - 6px);border-color:${muted?'#737373':st.color}"></b></div>
+          <span style="font-size:11px;color:var(--ink2);width:24px;text-align:right;margin-top:8px;font-variant-numeric:tabular-nums">${Math.round(vol*100)}</span></div>
+      </div></div>`;
+  }).join('');
+}
+
+function buildPlayer(){
+  $('content').innerHTML = `
+  <div class="tl"><div class="heads" id="heads"></div>
+    <div class="lanes" id="lanesBox"><div class="ruler" id="ruler"></div><canvas id="lanes"></canvas><div class="ph" id="ph"></div></div></div>
+  <div class="tp" id="tp">
+    <div class="time" id="ttime"></div>
+    <div class="ctr"><div class="tgl" id="bLoop">${ICON.repeat('#141414')}</div><div id="bBack">${ICON.back}</div><div class="play" id="bPlay"></div><div id="bFwd">${ICON.fwd}</div><div class="tgl" id="bMetro"></div></div>
+    <div class="chips"><div class="vchip" id="cTempo"><div class="k">TEMPO</div><div class="v"></div></div><div class="vchip" id="cPitch"><div class="k">PITCH</div><div class="v"></div></div><div class="vchip" id="cClick"><div class="k">CLICK</div><div class="v"></div></div></div>
+  </div>
+  <div id="pops"></div>`;
+}
+let built=null;
+function drawLanes(s, t){
+  const box=$('lanesBox'), cv=$('lanes'); const W=box.clientWidth, H=box.clientHeight-26;
+  if (cv.width!==W*2){ cv.width=W*2; cv.height=H*2; cv.style.width=W+'px'; cv.style.height=H+'px'; }
+  const g=cv.getContext('2d'); g.setTransform(2,0,0,2,0,0); g.clearRect(0,0,W,H);
+  const lh=H/4, frac=clamp(songTime(t)/SONG_LEN);
+  const reveal = clamp((t-19.6)/1.6);   // spåren ritas fram från vänster
+  const anySolo = Object.values(s.solo).some(Boolean);
+  STEMS.forEach((st,i)=>{
+    const y=i*lh, silenced = s.mute[st.id] || (anySolo && !s.solo[st.id]);
+    g.fillStyle = s.solo[st.id] ? hexA(st.color,.16) : hexA(st.color,.05); g.fillRect(0,y,W,lh);
+    const p=PEAKS[st.id], n=p.length, step=W/n, bw=Math.max(1,step*.55), col = silenced? '#9A9A9A' : st.color;
+    for (let k=0;k<n;k++){
+      const x=k*step; if (x/W>reveal) break;
+      const h=Math.max(1,p[k]*(lh-22)*(st.id==='bass'? s.bassVol/1.0 : 1));
+      g.fillStyle = hexA(col, (x/W<frac? 1 : .35) * (silenced? .45 : 1));
+      g.fillRect(x, y+lh/2-h/2, bw, h);
+    }
+    g.fillStyle='rgba(20,20,20,.05)'; g.fillRect(0,y+lh-1,W,1);
+  });
+  // taktlinjer
+  if (s.grid){ const bar=4*BEAT; g.fillStyle='rgba(20,20,20,.07)'; for (let b=0;b*bar<SONG_LEN;b+=8){ g.fillRect(W*b*bar/SONG_LEN,0,1,H);} }
+  // slagpuls när klicket är på
+  if (s.click){ const pulse=beatPulse(); if (pulse>0){ g.fillStyle=`rgba(237,84,41,${.10*pulse})`; g.fillRect(0,0,W,H);} }
+  // linjal
+  let html='';
+  if (s.grid){ const bar=4*BEAT; for (let b=0;b*bar<SONG_LEN;b+=8) html+=`<span style="left:${W*b*bar/SONG_LEN}px">${b+1}</span>`; }
+  else { for (let x=0;x<SONG_LEN;x+=15) html+=`<span style="left:${W*x/SONG_LEN}px;${x===0?'transform:none':''}">${fmt(x)}</span>`; }
+  $('ruler').innerHTML=html;
+  const ph=$('ph'); ph.style.left=(W*frac-1)+'px'; ph.style.height=(H+26)+'px'; ph.style.opacity = t>=19.6? 1:0;
+  return {W,H};
+}
+function hexA(hex,a){ const n=parseInt(hex.slice(1),16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; }
+function beatPulse(){ const t=window.__real||0; let p=0; for (const [vt,acc] of (TL.metronome||[])){ const d=t-vt; if (d>=0 && d<0.25) p=Math.max(p,(1-d/0.25)*(acc?1:.6)); } return p; }
+
+function renderApp(t, s){
+  const sc=sceneAt(t);
+  // header
+  $('hTitle').textContent = s.mode==='player' || s.mode==='work' ? 'Demo Song' : 'StemSplitter';
+  $('hSub').textContent = s.mode==='empty' ? 'Local stem separation' : s.mode==='work' ? 'Working…'
+     : s.analyzing ? 'Analyzing tempo…' : (s.grid || t>=54) ? `${Math.round(BPM*s.tempo)} BPM · 4/4` : 'Vocals · Drums · Bass · Other';
+  if (s.mode!==built){
+    built=s.mode;
+    if (s.mode==='player') buildPlayer();
+  }
+  if (s.mode==='empty'){
+    $('content').innerHTML = `<div class="center"><div class="emptycard" id="drop" style="${s.dropHover?'border-color:#ED5429;background:#FDEDE7':''}">
+      <div class="plus" style="${s.dropHover?'background:#ED5429':''}">${ICON.plusW}</div><h3>Drop an audio file</h3>
+      <p>The song is split into vocals, drums, bass and other — entirely on your Mac.</p>
+      <p style="font-size:12px">WAV · AIFF · CAF · MP3 · M4A · AAC · FLAC</p></div></div>`;
+    if (s.dropped){ const d=$('drop'); d.style.transform=`scale(${1-0.04*Math.sin(clamp((t-9.9)/.3)*Math.PI)})`; d.style.borderColor='#ED5429'; }
+  } else if (s.mode==='work'){
+    const w=s.work, pct=Math.floor(w*100);
+    // Stegen: läs, förbered, ljudfil, dela upp, spara
+    const stageAt = w<.06?0 : w<.14?1 : w<.30?2 : w<.97?3 : 4;
+    const pcts = [null,null,clamp((w-.14)/.16),clamp((w-.30)/.67),null];
+    const shown = pcts[stageAt];
+    const names=['Reading the file','Preparing the AI','Preparing the audio','Splitting into stems','Saving'];
+    $('content').innerHTML = `<div class="center"><div class="workcard">
+      <div style="font-weight:600;font-size:17px">Demo Song</div><div style="font-size:12px;color:var(--ink2);margin-top:4px">Time: ${fmt((t-12)*2.2)}</div>
+      <div class="pct">${shown==null?'—':Math.floor(shown*100)+' %'}</div>
+      <div class="bar"><i style="width:${(shown??0)*100}%"></i></div>
+      <div class="stages">${names.map((n,i)=>`<div class="stage"><div class="dot">${i<stageAt?ICON.check: i===stageAt?'<div style="width:14px;height:14px;border-radius:50%;border:2.5px solid #E1E1E3;border-top-color:#141414;transform:rotate('+(t*400)+'deg)"></div>':'<div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #E1E1E3"></div>'}</div><span style="${i===stageAt?'font-weight:600':''}${i>stageAt?';color:#737373':''}">${n}</span></div>`).join('')}</div>
+      <div style="font-size:13px;color:var(--ink2);margin-top:16px;display:flex;gap:8px;justify-content:center;align-items:center">${ICON.lock} Splitting into vocals, drums, bass and other on the GPU…</div>
+    </div></div>`;
+  } else {
+    const box=$('lanesBox'); const lh=(box.clientHeight-26)/4;
+    $('heads').style.setProperty('--lh', lh+'px'); $('heads').innerHTML=laneHeads(s);
+    $('heads').querySelectorAll('.lh').forEach(e=>e.style.height=lh+'px');
+    // spårens rubriker tonas in med spåren
+    $('heads').style.opacity = clamp((t-19.6)/.8);
+    drawLanes(s,t);
+    $('ttime').innerHTML = `${fmt(songTime(t))} <span>/ ${fmt(SONG_LEN)}</span>`;
+    $('bPlay').innerHTML = s.playing ? ICON.pause : ICON.play;
+    const m=$('bMetro'); m.style.background = s.click? '#ED5429':'#F4F4F5'; m.innerHTML = ICON.metro(s.click?'#fff':'#141414');
+    if (s.click){ const p=beatPulse(); m.style.boxShadow=`0 0 0 ${p*8}px rgba(237,84,41,${.25*p})`; } else m.style.boxShadow='none';
+    const ct=$('cTempo'), cp=$('cPitch'), cc=$('cClick');
+    ct.querySelector('.v').textContent = s.grid||t>=38 ? `${Math.round(BPM*s.tempo)} BPM` : `${Math.round(s.tempo*100)} %`;
+    ct.style.background = s.tempo!==1 ? '#FBE1D8':'#F4F4F5'; ct.querySelector('.k').style.color = s.tempo!==1?'#ED5429':'#737373';
+    cp.querySelector('.v').textContent = s.pitch>0?`+${s.pitch}`:`${s.pitch}`;
+    cp.style.background = s.pitch!==0 ? '#FBE1D8':'#F4F4F5'; cp.querySelector('.k').style.color = s.pitch!==0?'#ED5429':'#737373';
+    cc.querySelector('.v').textContent = s.click ? '70 %' : (s.analyzing? 'Analyzing' : (s.grid||t>=38 ? 'Off' : '–'));
+    cc.style.background = s.click ? '#FBE1D8':'#F4F4F5'; cc.querySelector('.k').style.color = s.click?'#ED5429':'#737373';
+    // paneler och menyer
+    let pops='';
+    const content=$('content').getBoundingClientRect(), scale=content.width/1544;
+    const rel=(el)=>{ const r=$(el).getBoundingClientRect(); return {x:(r.left-content.left)/scale, y:(r.top-content.top)/scale, w:r.width/scale, h:r.height/scale}; };
+    if (s.tempoPop){ const r=rel('cTempo'); const a=easeOut((t-38.45)/.25);
+      pops+=`<div class="pop" style="left:${r.x+r.w/2-140}px;top:${r.y-170}px;opacity:${a};transform:translateY(${(1-a)*8}px)"><h4>Tempo <span>${Math.round(BPM*s.tempo)} BPM</span></h4>
+       <div class="mini" style="margin-top:18px"><i style="width:${(s.tempo-.5)/1.5*100}%;background:#ED5429"></i><b style="left:calc(${(s.tempo-.5)/1.5*100}% - 6px);border-color:#ED5429"></b></div>
+       <div class="presets">${[0.5,0.75,0.9,1].map(v=>`<i id="pre-${v*100}" style="${Math.abs(v-s.tempo)<.001?'background:#ED5429;color:#fff':''}">${v*100} %</i>`).join('')}</div>
+       <div style="font-size:12px;color:var(--ink2);margin-top:12px">Pitch stays the same.</div></div>`; }
+    if (s.pitchPop){ const r=rel('cPitch'); const a=easeOut((t-41.75)/.25);
+      pops+=`<div class="pop" style="left:${r.x+r.w/2-140}px;top:${r.y-150}px;opacity:${a};transform:translateY(${(1-a)*8}px)"><h4>Pitch <span>${s.pitch>0?'+':''}${s.pitch} semitone${Math.abs(s.pitch)===1?'':'s'}</span></h4>
+       <div style="display:flex;align-items:center;gap:10px;margin-top:14px"><span class="tgl" style="width:26px;height:26px;font-weight:700">−</span>
+       <div class="mini" style="margin-top:0"><i style="width:${(s.pitch+12)/24*100}%;background:#ED5429"></i><b style="left:calc(${(s.pitch+12)/24*100}% - 6px);border-color:#ED5429"></b></div>
+       <span class="tgl" id="pitchPlus" style="width:26px;height:26px;font-weight:700">+</span></div>
+       <div style="font-size:12px;color:var(--ink2);margin-top:12px">Tempo stays the same.</div></div>`; }
+    if (s.menu){ const a=easeOut((t-54.75)/.15);
+      pops+=`<div class="menu" style="right:0;top:-46px;opacity:${a}"><div>Open audio file…</div><div id="miExport" style="${t>55.35?'background:#ED5429;color:#fff':''}">Export mix…</div><hr><div style="color:#737373">Tempo</div><div>Halve tempo</div><div>Double tempo</div><div>Shift downbeat</div><hr><div>Re-separate song…</div><div>Reset mix</div></div>`; }
+    if (s.export>0 && t<61){ const r=rel('tp');
+      pops+= s.exportDone
+        ? `<div class="pill" style="left:${r.w/2-200}px;top:${r.y-58}px;width:400px">${ICON.check}<span>Saved: <b>Demo Song (mix).wav</b></span><span style="color:#ED5429;margin-left:auto">Show in Finder</span></div>`
+        : `<div class="pill" style="left:${r.w/2-200}px;top:${r.y-58}px;width:400px"><div class="bar" style="width:150px;margin:0"><i style="width:${s.export*100}%"></i></div><span style="font-variant-numeric:tabular-nums">Exporting mix… ${Math.floor(s.export*100)} %</span></div>`; }
+    $('pops').innerHTML=pops;
+  }
+  // bibliotekets popover ligger över hela fönstret
+  const lib=document.getElementById('libpop');
+  if (s.lib){
+    const a=easeOut((t-58.6)/.2);
+    const items=[['Demo Song','Today',true],['Evening Jam','Nov 12'],['Rehearsal before the gig','Nov 9'],['Bass practice – verse','Nov 2'],['Acoustic demo','Oct 28']];
+    const html=`<div style="display:flex;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #E1E1E3"><b style="font-size:15px">Recent songs</b><span style="font-size:12px;color:#737373">412 MB</span></div>`+items.map(([n,d,cur],i)=>`<div class="libitem" style="${i===1&&t>60.2?'background:#F4F4F5':''}"><div>${n}<small>${d}</small></div>${cur?ICON.speaker:''}</div>`).join('');
+    let el=lib; if(!el){ el=document.createElement('div'); el.id='libpop'; el.className='pop'; el.style.padding='0'; el.style.width='320px'; $('win').appendChild(el); }
+    el.innerHTML=html; el.style.left='28px'; el.style.top='98px'; el.style.opacity=a; el.style.transform=`translateY(${(1-a)*8}px)`;
+  } else if (lib) lib.remove();
+}
+
+// ------------------------------------------------------------------ kamera: fönstrets placering per scen
+// [t, x, y, skala] — fönstret är 1600×920
+const CAM = [   // fönstret är 1780×700, ytan 1600×630
+  [5.0, -446, 700, 1.4],[6.0, -446, -232, 1.4],[19.0, -446, -232, 1.4],   // kortet för att dra in och förloppet
+  [20.0, -1, 0, .9],[27.6, -1, 0, .9],
+  [28.6, 30, -152, 1.3],[37.8, 30, -152, 1.3],           // spårens rubriker: M, S och volym
+  [38.6, -1022, -377, 1.45],[45.6, -1022, -377, 1.45],   // transportfältets knappar och paneler
+  [46.4, -1, 0, .9],[48.3, -1, 0, .9],
+  [49.1, 0, 0, 1.0],[53.4, 0, 0, 1.0],                   // sidhuvud med BPM och spår med slagpuls
+  [54.2, -1, 0, .9],[61, -1, 0, .9],
+];
+function camera(t){
+  const v = kf(t, CAM.map(([tt,x,y,s])=>[tt,[x,y,s]]));
+  const w=$('win'); w.style.transform=`translate(${v[0]}px,${v[1]}px) scale(${v[2]})`;
+  $('view').style.opacity = t<5 || t>61.2 ? 0 : 1;
+}
+
+// ------------------------------------------------------------------ muspekare: [t, mål] där mål är element-id eller [x,y]
+const CUR = [
+  [5.6,[1500,1150]],[7.0,[1640,780]],[7.6,'fileStart'],[9.6,'drop'],[10.4,'drop'],[11.2,[1500,1120]],
+  [23.6,[1320,1120]],[24.6,'laneTarget'],[26.5,[1500,1150]],
+  [28.8,[960,1120]],[29.8,'s-drums'],[33.3,'s-drums'],[34.4,'m-vocals'],[35.3,'vol-bass@1'],[36.3,'vol-bass@.6'],[37.2,'m-vocals'],[37.9,[960,1150]],
+  [38.1,'cTempo'],[38.8,'pre-75'],[40.9,'pre-75'],[41.5,'cPitch'],[41.9,'pitchPlus'],[42.4,'pitchPlus'],[44.4,[1250,1100]],
+  [46.2,[1500,1150]],[47.6,'bMetro'],[48.6,'bMetro'],[49.3,[1650,1200]],
+  [54.2,[1700,500]],[54.6,'btnMore'],[55.2,'miExport'],[55.6,'miExport'],[57.0,[1500,900]],[58.4,'btnHistory'],[59.6,'btnHistory'],[60.1,'libRow'],[60.8,[600,1200]],
+];
+const CLICKS_UI=[9.9, 30.0, 33.5, 34.6, 37.4, 38.4, 39.0, 41.7, 42.0, 42.45, 48.0, 54.7, 55.35, 58.55];
+function targetPos(id, t){
+  if (Array.isArray(id)) return id;
+  if (id==='fileStart') return [1660,700];
+  if (id==='laneTarget'){ const b=$('lanesBox'); if(!b) return [960,600]; const r=b.getBoundingClientRect(); return [r.left+r.width*.62, r.top+r.height*.45]; }
+  if (id==='libRow'){ const e=document.querySelectorAll('#libpop .libitem')[1]; if(!e) return [400,400]; const r=e.getBoundingClientRect(); return [r.left+90,r.top+r.height/2]; }
+  let frac=null; if (id.includes('@')){ [id,frac]=id.split('@'); frac=parseFloat(frac)/1.5; }
+  const e=$(id); if(!e) return null; const r=e.getBoundingClientRect();
+  return frac==null ? [r.left+r.width/2, r.top+r.height/2] : [r.left+r.width*frac, r.top+r.height/2];
+}
+function cursor(t){
+  const c=$('cursor');
+  let i=CUR.findIndex(k=>k[0]>t);
+  if (t<CUR[0][0] || t>=61 || i===0){ c.style.opacity=0; return null; }
+  if (i<0) i=CUR.length;
+  const a=CUR[i-1], b=CUR[Math.min(i,CUR.length-1)];
+  const pa=targetPos(a[1],t), pb=targetPos(b[1],t); if(!pa||!pb){ c.style.opacity=0; return null; }
+  const x = i>=CUR.length ? 1 : ease((t-a[0])/(b[0]-a[0]));
+  const p=[lerp(pa[0],pb[0],x), lerp(pa[1],pb[1],x)];
+  let sc=1; for (const ct of CLICKS_UI){ const d=t-ct; if (d>-0.08 && d<0.14) sc=0.82; }
+  c.style.opacity=1; c.style.transform=`translate(${p[0]-4}px,${p[1]-4}px) scale(${sc})`;
+  // klickringar
+  let fx=''; for (const ct of CLICKS_UI){ const d=t-ct; if (d>=0 && d<0.45){ const r=12+d*90; fx+=`<div class="ripple" style="left:${p[0]-r}px;top:${p[1]-r}px;width:${2*r}px;height:${2*r}px;opacity:${1-d/.45}"></div>`; } }
+  $('fx').innerHTML=fx;
+  return p;
+}
+
+// ------------------------------------------------------------------ text
+function head(t){
+  const sc=sceneAt(t), h=$('head');
+  if (!sc.title){ h.style.opacity=0; return; }
+  const a=easeOut((t-sc.t0-0.1)/.5), out=1-clamp((t-(sc.t1-0.35))/.35);
+  h.style.opacity=Math.min(a,out); h.style.transform=`translateY(${(1-a)*24}px)`;
+  $('tag').textContent=sc.tag; $('title').textContent=sc.title; $('sub').textContent=sc.sub;
+  // titlar ligger under kameran när fönstret zoomar
+  h.style.zIndex = 5;
+}
+function caption(){
+  const t=window.__real||0, el=$('caption');
+  const cap=(TL.captions||[]).find(c=>t>=c.t0 && t<c.t1);
+  if (!cap || !cap.words.length){ el.style.opacity=0; return; }
+  el.innerHTML = cap.words.map(([w,wt])=> wt<=t ? `<b>${w}</b>` : w).join(' ');
+  const a=clamp((t-cap.t0)/.25), o=1-clamp((t-(cap.t1-.2))/.2);
+  el.style.opacity=Math.min(a,o);
+  el.style.bottom = cap.scene==='outro' ? '470px' : '46px';
+}
+// ------------------------------------------------------------------ intro och outro
+function intro(t){
+  const el=$('intro');
+  if (t>=5.6){ el.style.opacity=0; return; }
+  const a=easeOut(t/1.0), o=1-clamp((t-5.0)/.5);
+  const cards = STEMS.map((st,i)=>{
+    const p=PEAKS[st.id].slice(40,120); const bars=p.map((v,k)=>`<i style="position:absolute;left:${k*4.2}px;top:${34-v*30}px;width:2.4px;height:${Math.max(2,v*60)}px;background:${st.color};border-radius:2px"></i>`).join('');
+    const pos=[[180,180,-9],[1420,150,7],[230,700,6],[1380,690,-7]][i];
+    const drift=Math.sin(t*0.9+i)*10, ap=easeOut((t-0.2-i*0.12)/.8);
+    return `<div class="tilt" style="left:${pos[0]}px;top:${pos[1]+drift+(1-ap)*60}px;transform:rotate(${pos[2]}deg);opacity:${ap};width:370px;height:120px">
+      <div style="display:flex;align-items:center;gap:10px"><div class="ic" style="background:${st.color};width:28px;height:28px">${ICON[st.icon]('#fff')}</div><b style="font-size:15px">${st.name}</b></div>
+      <div style="position:relative;height:68px;margin-top:6px">${bars}</div></div>`;
+  }).join('');
+  el.style.opacity=o;
+  el.innerHTML = cards + `<div style="position:absolute;left:0;right:0;top:${300+(1-a)*30}px;text-align:center;opacity:${a}">
+    <img src="AppIcon.png" style="width:190px;height:190px;transform:scale(${.85+.15*a})">
+    <div class="wordmark" style="font-size:150px;line-height:1;margin-top:6px">StemSplitter</div>
+    <div style="display:inline-block;margin-top:26px;background:#141414;color:#fff;font-size:22px;font-weight:600;padding:10px 22px;border-radius:999px">Now on macOS</div></div>`;
+}
+function outro(t){
+  const el=$('outro');
+  if (t<61){ el.style.opacity=0; el.innerHTML=''; return; }
+  const r=easeOut((t-61)/1.0)*2600, a=easeOut((t-61.8)/.8);
+  el.style.opacity=1;
+  el.innerHTML = `<div style="position:absolute;left:${960-r}px;top:${1080-r}px;width:${2*r}px;height:${2*r}px;border-radius:50%;background:#ED5429"></div>
+   <div style="position:absolute;left:48px;top:40px;color:#fff;font-size:20px;font-weight:600;opacity:${a}">For macOS 14 and later</div>
+   <div style="position:absolute;right:48px;top:40px;color:#fff;font-size:20px;font-weight:600;opacity:${a}">Fully local</div>
+   <img src="AppIcon.png" style="position:absolute;left:50%;top:${150+(1-a)*30}px;width:230px;transform:translateX(-50%);opacity:${a};filter:drop-shadow(0 20px 40px rgba(0,0,0,.25))">
+   <div class="wordmark" style="position:absolute;left:0;right:0;bottom:${-60+(1-a)*80}px;text-align:center;color:#fff;font-size:330px;line-height:1;letter-spacing:-16px;opacity:${a}">StemSplitter</div>`;
+}
+
+// ------------------------------------------------------------------ fil som dras in
+function fileDrag(t, cur){
+  let el=document.getElementById('file');
+  if (t>=7.6 && t<10.1 && cur){
+    if(!el){ el=document.createElement('div'); el.id='file'; el.className='file'; el.innerHTML=`<div class="fi">${ICON.note}</div><div>Demo Song.mp3<div style="font-size:12px;font-weight:500;color:#737373">7,4 MB</div></div>`; $('stage').insertBefore(el,$('cursor')); }
+    const shrink = t>9.6 ? 1-clamp((t-9.6)/.3)*.6 : 1;
+    el.style.left=(cur[0]-30)+'px'; el.style.top=(cur[1]-20)+'px'; el.style.transform=`scale(${shrink}) rotate(-3deg)`; el.style.opacity= t>9.9 ? 1-clamp((t-9.9)/.2) : 1;
+  } else if (el) el.remove();
+}
+
+// ------------------------------------------------------------------ huvudfunktion
+function realToDesign(r){
+  const w=TL.warp; if (!w) return r;
+  for (let i=1;i<w.length;i++){ if (r<=w[i][0]){ const [r0,d0]=w[i-1],[r1,d1]=w[i]; return d0+(d1-d0)*clamp((r-r0)/(r1-r0)); } }
+  return w.at(-1)[1];
+}
+window.render = function(tReal){
+  window.__real=tReal;
+  const t=realToDesign(tReal);
+  const s=state(t);
+  camera(t);
+  renderApp(t,s);
+  head(t); caption(); intro(t); outro(t);
+  const cur=cursor(t); fileDrag(t,cur);
+};
+</script></body></html>

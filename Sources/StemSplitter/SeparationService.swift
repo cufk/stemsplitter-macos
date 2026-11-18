@@ -1,9 +1,11 @@
 import Foundation
+import StemSplitterAudio
 import StemSplitterCore
 
-final class SeparationService {
+final class SeparationService: @unchecked Sendable {
     enum SeparationError: LocalizedError {
         case pythonMissing
+        case bootstrapMissing
         case bootstrapFailed(Int32, String)
         case demucsFailed(Int32, String)
         case noStemsFound
@@ -11,15 +13,35 @@ final class SeparationService {
         var errorDescription: String? {
             switch self {
             case .pythonMissing:
-                return "Hittade ingen Python 3.9+. Appen kan ladda ner och installera Python från python.org åt dig."
+                return "Hittade ingen Python 3.9–3.12. Appen kan ladda ner och installera Python 3.12 från python.org åt dig."
+            case .bootstrapMissing:
+                return "Installationsskriptet saknas i appen. Bygg om appen."
             case .bootstrapFailed(let status, let tail):
                 return "Kunde inte installera beroenden i den lokala Python-miljön (exitkod \(status)). Kontrollera internetanslutningen. Senaste loggrader:\n\(tail)"
             case .demucsFailed(let status, let tail):
                 return "Demucs avslutades med fel (exitkod \(status)). Senaste loggrader:\n\(tail)"
             case .noStemsFound:
-                return "Inga stem-filer hittades i utdatan från Demucs."
+                return "Demucs gav inte alla fyra stems (sång, trummor, bas, övrigt)."
             }
         }
+    }
+
+    /// Förlopp under separeringen.
+    enum Progress: Sendable {
+        case preparing(String)
+        case converting(Double)
+        /// Nedladdning av modellvikter första gången en modell används.
+        case downloadingModel(Double)
+        /// Samlat förlopp över alla modellomgångar.
+        case separating(Double?, pass: Int, passes: Int, onGPU: Bool)
+        case retryingOnCPU
+    }
+
+    struct Result {
+        /// Arbetskatalog som anroparen ska ta bort när stems har flyttats.
+        let workDirectory: URL
+        let stems: [StemKind: URL]
+        let model: String
     }
 
     static var appSupportRoot: URL {
@@ -31,225 +53,225 @@ final class SeparationService {
         return dir
     }
 
-    private var venvURL: URL {
-        Self.appSupportRoot.appendingPathComponent("venv", isDirectory: true)
+    static var venvURL: URL {
+        appSupportRoot.appendingPathComponent("venv", isDirectory: true)
     }
 
-    private var demucsPath: String {
-        venvURL.appendingPathComponent("bin/demucs").path
-    }
+    private static let workPrefix = "separation-"
 
-    private var installMarker: URL {
-        Self.appSupportRoot.appendingPathComponent("deps-installed.flag")
-    }
-
-    private var pythonPath: String?
-
-    private func ensurePython() async throws -> String {
-        if let pythonPath { return pythonPath }
-        guard let found = await PythonLocator.find() else {
-            throw SeparationError.pythonMissing
+    /// Tar bort arbetskataloger som blivit kvar om appen avslutades mitt i en separering.
+    static func removeStaleWorkDirectories() {
+        let fileManager = FileManager.default
+        guard let entries = try? fileManager.contentsOfDirectory(at: appSupportRoot, includingPropertiesForKeys: nil) else { return }
+        for url in entries where url.lastPathComponent.hasPrefix(workPrefix) {
+            try? fileManager.removeItem(at: url)
         }
-        pythonPath = found.path
-        return found.path
     }
 
-    private var deviceFile: URL {
-        Self.appSupportRoot.appendingPathComponent("device.txt")
+    private var demucsURL: URL { Self.venvURL.appendingPathComponent("bin/demucs") }
+    private var venvPythonURL: URL { Self.venvURL.appendingPathComponent("bin/python") }
+    private var installMarker: URL { Self.appSupportRoot.appendingPathComponent("deps-installed.flag") }
+    private var deviceFile: URL { Self.appSupportRoot.appendingPathComponent("device.txt") }
+
+    private static let environment = [
+        "PYTHONUNBUFFERED": "1",
+        // demucs 4.0.1 + torch >= 2.6: undvik weights_only-fel vid modell-laddning
+        "TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD": "1"
+    ]
+
+    func separate(
+        input: URL,
+        model: String = "htdemucs",
+        progress: @escaping @Sendable (Progress) -> Void
+    ) async throws -> Result {
+        try await ensureEnvironment { message in progress(.preparing(message)) }
+
+        let fileManager = FileManager.default
+        let workDirectory = Self.appSupportRoot.appendingPathComponent("\(Self.workPrefix)\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: workDirectory, withIntermediateDirectories: true)
+
+        do {
+            // Alltid till 44,1 kHz stereo-WAV: demucs/torchaudio saknar ofta mp3-stöd, och stems
+            // blir då exakt lika långa som mixen så att "Övrigt" kan räknas fram nedan.
+            progress(.converting(0))
+            log("Gör om \(input.lastPathComponent) till 44,1 kHz stereo-WAV")
+            let demucsInput = try await Task.detached(priority: .userInitiated) {
+                let throttle = LockedThrottle()
+                return try AudioConverter.wavCopy(of: input, in: workDirectory) { value in
+                    if throttle.accept(value) { progress(.converting(value)) }
+                }
+            }.value
+            log("Ljudfilen förberedd")
+            let outputDirectory = workDirectory.appendingPathComponent("out", isDirectory: true)
+
+            let device = await detectDevice()
+            do {
+                try await runDemucs(model: model, device: device, input: demucsInput, output: outputDirectory, progress: progress)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch where device == "mps" {
+                // MPS kan sakna stöd för vissa operationer i htdemucs — kör om på CPU
+                log("Demucs på GPU (MPS) misslyckades — kör om på CPU")
+                progress(.retryingOnCPU)
+                try? fileManager.removeItem(at: outputDirectory)
+                try? "cpu".write(to: deviceFile, atomically: true, encoding: .utf8)
+                try await runDemucs(model: model, device: "cpu", input: demucsInput, output: outputDirectory, progress: progress)
+            }
+
+            let located = try StemLocator.locate(in: outputDirectory)
+            guard let vocals = located[.vocals], let drums = located[.drums],
+                  let bass = located[.bass], let other = located[.other] else {
+                log("Demucs gav bara: \(located.keys.map(\.rawValue).sorted())")
+                throw SeparationError.noStemsFound
+            }
+
+            // "Övrigt" = originalet minus sång, trummor och bas. Då försvinner inget av ljudbilden:
+            // det som Demucs inte placerade i någon stem hamnar här.
+            do {
+                let report = try await Task.detached(priority: .userInitiated) {
+                    try StemResidual.rebuild(target: other, mix: demucsInput, subtract: [vocals, drums, bass])
+                }.value
+                log(String(format: "Övrigt kompletterat — det som saknades låg på %.1f dB relativt originalet", report.missingLevel))
+            } catch {
+                // Inte kritiskt: Demucs egen "övrigt" används
+                log("Kunde inte komplettera Övrigt: \(error.localizedDescription)")
+            }
+            return Result(workDirectory: workDirectory, stems: located, model: model)
+        } catch {
+            try? fileManager.removeItem(at: workDirectory)
+            throw error
+        }
     }
 
-    /// Välj mps (Apple Silicon GPU) om tillgängligt, annars cpu. Cachat i device.txt.
+    private func runDemucs(
+        model: String,
+        device: String,
+        input: URL,
+        output: URL,
+        progress: @escaping @Sendable (Progress) -> Void
+    ) async throws {
+        let onGPU = device == "mps"
+        let expectedPasses = SeparationModel(rawValue: model)?.passes ?? 1
+        progress(.preparing("Startar Demucs…"))
+        log("Startar demucs -n \(model) -d \(device) \(input.lastPathComponent) (\(expectedPasses) omgång(ar))")
+        let throttle = LockedThrottle()
+        let tracker = LockedPassTracker(expectedPasses: expectedPasses)
+        do {
+            try await ProcessRunner.run(
+                executable: demucsURL,
+                // --float32: ingen avrundning till 16 bitar och ingen omskalning av stems som klipper
+                // (omskalning skulle ändra balansen mellan stems så att summan inte blir originalet)
+                arguments: ["-n", model, "-d", device, "--float32", "-o", output.path, input.path],
+                environment: Self.environment,
+                onLine: { line in
+                    switch ProgressParser.classify(line) {
+                    case .separation(let fraction):
+                        let (overall, pass, passes, newPass) = tracker.update(fraction)
+                        if newPass { log("demucs: modell \(pass) av \(passes)") }
+                        if throttle.accept(overall) {
+                            progress(.separating(overall, pass: pass, passes: passes, onGPU: onGPU))
+                        }
+                        if throttle.shouldLog(overall) { log("demucs \(Int(overall * 100)) % (modell \(pass) av \(passes))") }
+                    case .download(let fraction):
+                        progress(.downloadingModel(fraction))
+                    case .other:
+                        log("demucs: \(line)")
+                    }
+                }
+            )
+            log("Demucs klar")
+        } catch let failure as ProcessRunner.Failure {
+            log("Demucs avslutades med exitkod \(failure.status):\n\(failure.tail)")
+            throw SeparationError.demucsFailed(failure.status, failure.tail)
+        }
+    }
+
+    /// Välj mps (Apple Silicon-GPU) om tillgängligt, annars cpu. Cachas i device.txt.
     private func detectDevice() async -> String {
         if let cached = try? String(contentsOf: deviceFile, encoding: .utf8)
-            .trimmingCharacters(in: .whitespacesAndNewlines), !cached.isEmpty {
+            .trimmingCharacters(in: .whitespacesAndNewlines), ["mps", "cpu"].contains(cached) {
             return cached
         }
-        let python = venvURL.appendingPathComponent("bin/python").path
-        let detected: String
-        if let output = try? await captureOutput(
-            launchPath: python,
-            arguments: ["-c", "import torch; print('mps' if torch.backends.mps.is_available() else 'cpu')"]
-        ), let last = output.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "\n").last,
-           ["mps", "cpu"].contains(last) {
-            detected = String(last)
-        } else {
-            detected = "cpu"
-        }
-        try? detected.data(using: .utf8)?.write(to: deviceFile)
+        let lines = try? await ProcessRunner.run(
+            executable: venvPythonURL,
+            arguments: ["-c", "import torch; print('mps' if torch.backends.mps.is_available() else 'cpu')"],
+            environment: Self.environment
+        )
+        let detected = lines?.last.flatMap { ["mps", "cpu"].contains($0) ? $0 : nil } ?? "cpu"
+        log("Beräkningsenhet: \(detected)")
+        try? detected.write(to: deviceFile, atomically: true, encoding: .utf8)
         return detected
     }
 
-    func separate(input: URL, model: String = "htdemucs", progress: @escaping (String, Double?) -> Void) async throws -> [StemKind: URL] {
-        try await ensureEnvironment { message in progress(message, nil) }
-
-        let outputDir = Self.appSupportRoot.appendingPathComponent("separation-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
-
-        // demucs/torchaudio saknar ofta ffmpeg/mp3-stöd — konvertera till WAV först (utom om redan WAV)
-        let demucsInput: URL
-        if input.pathExtension.lowercased() == "wav" {
-            demucsInput = input
-        } else {
-            progress("Konverterar till WAV…", nil)
-            demucsInput = try AudioConverter.wavCopy(of: input)
-        }
-
-        func runDemucs(device: String) async throws {
-            progress("Separerar stems med \(model) på \(device)…", nil)
-            try await runStreaming(
-                launchPath: demucsPath,
-                arguments: ["-n", model, "-d", device, "-o", outputDir.path, demucsInput.path],
-                progress: { line in progress(line, ProgressParser.fraction(fromLine: line)) },
-                failure: { status, tail in SeparationError.demucsFailed(status, tail) }
-            )
-        }
-
-        let device = await detectDevice()
-        do {
-            try await runDemucs(device: device)
-        } catch {
-            // MPS kan sakna stöd för vissa opar i htdemucs — fall tillbaka på CPU
-            if device == "mps" {
-                progress("MPS funkade inte — kör om på CPU…", nil)
-                try? FileManager.default.removeItem(at: deviceFile)
-                try await runDemucs(device: "cpu")
-            } else {
-                throw error
-            }
-        }
-
-        let located = try StemLocator.locate(in: outputDir)
-        guard !located.isEmpty else { throw SeparationError.noStemsFound }
-        return located
-    }
-
-    private func ensureEnvironment(progress: @escaping (String) -> Void) async throws {
+    private func ensureEnvironment(progress: @escaping @Sendable (String) -> Void) async throws {
         let fileManager = FileManager.default
         if fileManager.fileExists(atPath: installMarker.path),
-           fileManager.fileExists(atPath: demucsPath) {
+           fileManager.isExecutableFile(atPath: demucsURL.path) {
             return
         }
-        let python = try await ensurePython()
-        guard let script = Bundle.module.url(forResource: "bootstrap", withExtension: "sh") else {
+        guard let python = await PythonLocator.find() else {
             throw SeparationError.pythonMissing
         }
-        progress("Skapar lokal Python-miljö och installerar Demucs (kan ta flera minuter första gången)…")
-        try await runStreaming(
-            launchPath: "/bin/sh",
-            arguments: [script.path, venvURL.path],
-            progress: progress,
-            extraEnv: ["PYTHON_BIN": python],
-            failure: { status, tail in SeparationError.bootstrapFailed(status, tail) }
-        )
-        fileManager.createFile(atPath: installMarker.path, contents: Date().description.data(using: .utf8))
+        guard let script = Bundle.module.url(forResource: "bootstrap", withExtension: "sh") else {
+            throw SeparationError.bootstrapMissing
+        }
+        progress("Installerar Demucs i en lokal Python-miljö (flera minuter första gången)…")
+        log("Installerar Demucs med \(python.path) (\(python.major).\(python.minor))")
+        do {
+            try await ProcessRunner.run(
+                executable: URL(fileURLWithPath: "/bin/sh"),
+                arguments: [script.path, Self.venvURL.path],
+                environment: Self.environment.merging(["PYTHON_BIN": python.path]) { _, new in new },
+                onLine: { line in
+                    if !line.contains("%|") && !line.contains("MB/s") { log("bootstrap: \(line)") }
+                    progress(line)
+                }
+            )
+            log("Demucs installerat")
+        } catch let failure as ProcessRunner.Failure {
+            log("Installationen misslyckades (exitkod \(failure.status)):\n\(failure.tail)")
+            throw SeparationError.bootstrapFailed(failure.status, failure.tail)
+        }
+        try? fileManager.removeItem(at: deviceFile)
+        fileManager.createFile(atPath: installMarker.path, contents: Data(Date().description.utf8))
+    }
+}
+
+/// Trådsäker strypning av förloppet från processens utdata (anropas från en bakgrundskö).
+private final class LockedThrottle: @unchecked Sendable {
+    private let lock = NSLock()
+    private var ui = ProgressThrottle(step: 0.01)
+    private var lastLogged = -1
+
+    func accept(_ value: Double) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return ui.accept(value)
     }
 
-    private func runStreaming(
-        launchPath: String,
-        arguments: [String],
-        progress: @escaping (String) -> Void,
-        extraEnv: [String: String] = [:],
-        failure: @escaping (Int32, String) -> Error
-    ) async throws {
-        let process = Process()
-        process.launchPath = launchPath
-        process.arguments = arguments
-        var environment = ProcessInfo.processInfo.environment
-        environment["PYTHONUNBUFFERED"] = "1"
-        // demucs 4.0.1 + torch >=2.6: undvik weights_only-fel vid modell-laddning
-        environment["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
-        for (key, value) in extraEnv {
-            environment[key] = value
-        }
-        process.environment = environment
+    /// Loggar var tionde procent.
+    func shouldLog(_ value: Double) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        let decile = Int(value * 10)
+        guard decile != lastLogged else { return false }
+        lastLogged = decile
+        return true
+    }
+}
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-        try process.run()
+/// Trådsäker sammanslagning av Demucs modellomgångar till ett förlopp.
+private final class LockedPassTracker: @unchecked Sendable {
+    private let lock = NSLock()
+    private var progress: PassProgress
 
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            var buffer = Data()
-            var tail: [String] = []
-            let box = ContinuationBox(continuation: continuation)
-            pipe.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                if data.isEmpty {
-                    handle.readabilityHandler = nil
-                    process.waitUntilExit()
-                    let status = process.terminationStatus
-                    if status == 0 {
-                        box.resume()
-                    } else {
-                        box.resume(throwing: failure(status, tail.suffix(30).joined(separator: "\n")))
-                    }
-                    return
-                }
-                buffer.append(data)
-                while let index = buffer.firstIndex(where: { $0 == 0x0A || $0 == 0x0D }) {
-                    let lineData = buffer.subdata(in: buffer.startIndex..<index)
-                    buffer.removeSubrange(buffer.startIndex...index)
-                    if let line = String(data: lineData, encoding: .utf8) {
-                        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
-                            progress(trimmed)
-                            let isProgressSpam = trimmed.contains("%|") || trimmed.contains("MB/s") || trimmed.contains("it/s]") || trimmed.contains("s/it]")
-                            if !isProgressSpam {
-                                tail.append(trimmed)
-                                if tail.count > 30 {
-                                    tail.removeFirst(tail.count - 30)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    init(expectedPasses: Int) {
+        progress = PassProgress(expectedPasses: expectedPasses)
     }
 
-    private func captureOutput(launchPath: String, arguments: [String]) async throws -> String {
-        let process = Process()
-        process.launchPath = launchPath
-        process.arguments = arguments
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-        try process.run()
-
-        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
-            var collected = Data()
-            pipe.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                if data.isEmpty {
-                    handle.readabilityHandler = nil
-                    process.waitUntilExit()
-                    if process.terminationStatus == 0 {
-                        continuation.resume(returning: String(data: collected, encoding: .utf8) ?? "")
-                    } else {
-                        continuation.resume(throwing: SeparationError.pythonMissing)
-                    }
-                    return
-                }
-                collected.append(data)
-            }
-        }
-    }
-
-    private final class ContinuationBox {
-        private var continuation: CheckedContinuation<Void, Error>?
-
-        init(continuation: CheckedContinuation<Void, Error>) {
-            self.continuation = continuation
-        }
-
-        func resume() {
-            continuation?.resume(returning: ())
-            continuation = nil
-        }
-
-        func resume(throwing error: Error) {
-            continuation?.resume(throwing: error)
-            continuation = nil
-        }
+    /// Samlat förlopp, aktuell omgång (från 1), antal omgångar och om en ny omgång just började.
+    func update(_ fraction: Double) -> (Double, Int, Int, Bool) {
+        lock.lock(); defer { lock.unlock() }
+        let before = progress.passNumber
+        let overall = progress.update(fraction)
+        return (overall, progress.passNumber, progress.passes, progress.passNumber != before)
     }
 }

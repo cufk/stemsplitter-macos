@@ -2,56 +2,42 @@ import Foundation
 import StemSplitterCore
 
 enum PythonLocator {
-    static let minimum = (major: 3, minor: 9)
-
-    struct Found {
+    struct Found: Sendable {
         let path: String
-        let version: (major: Int, minor: Int)
+        let major: Int
+        let minor: Int
     }
 
-    private static let candidatePaths = [
-        "/opt/homebrew/bin/python3",
-        "/usr/local/bin/python3",
-        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
-        "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
-        "/usr/bin/python3"
-    ]
-
+    /// Letar efter en Python 3.9–3.12 på kända platser (inte via PATH, som är minimal för GUI-appar).
     static func find() async -> Found? {
-        if let found = await probe(executable: "/usr/bin/env", arguments: ["python3"], reportedPath: "python3") {
-            return found
-        }
-        for path in candidatePaths {
-            if let found = await probe(executable: path, arguments: [], reportedPath: path) {
+        let includeSystem = await commandLineToolsInstalled()
+        for path in PythonCandidates.paths(includeSystem: includeSystem)
+        where FileManager.default.isExecutableFile(atPath: path) {
+            if let found = await probe(path) {
                 return found
             }
         }
         return nil
     }
 
-    private static func probe(executable: String, arguments: [String], reportedPath: String) async -> Found? {
-        await withCheckedContinuation { continuation in
-            let process = Process()
-            process.launchPath = executable
-            process.arguments = arguments + ["--version"]
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = pipe
-            guard (try? process.run()) != nil else {
-                continuation.resume(returning: nil)
-                return
-            }
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0,
-                  let output = String(data: data, encoding: .utf8),
-                  PythonVersion.isCompatible(output, minimum: minimum),
-                  let version = PythonVersion.parse(output)
-            else {
-                continuation.resume(returning: nil)
-                return
-            }
-            continuation.resume(returning: Found(path: reportedPath, version: version))
+    /// Utan utvecklarverktyg är /usr/bin/python3 en genväg som öppnar en installationsdialog.
+    private static func commandLineToolsInstalled() async -> Bool {
+        do {
+            try await ProcessRunner.run(executable: URL(fileURLWithPath: "/usr/bin/xcode-select"), arguments: ["-p"])
+            return true
+        } catch {
+            return false
         }
+    }
+
+    private static func probe(_ path: String) async -> Found? {
+        guard let lines = try? await ProcessRunner.run(executable: URL(fileURLWithPath: path), arguments: ["--version"]) else {
+            return nil
+        }
+        let output = lines.joined(separator: "\n")
+        guard PythonVersion.isSupported(output), let version = PythonVersion.parse(output) else {
+            return nil
+        }
+        return Found(path: path, major: version.major, minor: version.minor)
     }
 }

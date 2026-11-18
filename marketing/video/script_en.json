@@ -1,0 +1,164 @@
+{
+ "voice": "en-US-Chirp3-HD-Aoede",
+ "lead": 0.45,
+ "tail": 0.75,
+ "gap_comma": 0.16,
+ "gap_sentence": 0.32,
+ "scenes": [
+  {
+   "id": "intro",
+   "design": [
+    0,
+    5.5
+   ],
+   "vo": [
+    "Meet StemSplitter.",
+    "The easiest way to practice along with the songs you love."
+   ]
+  },
+  {
+   "id": "drop",
+   "design": [
+    5.5,
+    12
+   ],
+   "anchors": {
+    "drop": 9.9
+   },
+   "tag": "Get started",
+   "title": "Drop in a song",
+   "sub": "MP3, M4A, WAV, AIFF or FLAC — straight from your Mac.",
+   "vo": [
+    "Just drag in a song you have the rights to use,",
+    "{drop}and StemSplitter gets right to work."
+   ]
+  },
+  {
+   "id": "separate",
+   "design": [
+    12,
+    19.5
+   ],
+   "anchors": {
+    "done": 18.4
+   },
+   "tag": "Local AI",
+   "title": "Split right on your Mac",
+   "sub": "Demucs runs on your GPU. No music ever leaves your computer.",
+   "vo": [
+    "The AI splits it right on your Mac.",
+    "Nothing gets uploaded,",
+    "and you can follow every step{done} of the way."
+   ]
+  },
+  {
+   "id": "lanes",
+   "design": [
+    19.5,
+    28
+   ],
+   "anchors": {
+    "lanes": 19.9
+   },
+   "tag": "Four lanes",
+   "title": "Vocals, drums, bass and other",
+   "sub": "Every part gets its own lane — the whole song at a glance.",
+   "vo": [
+    "{lanes}Vocals, drums, bass, and everything else,",
+    "each get their own lane, in their own color."
+   ]
+  },
+  {
+   "id": "mix",
+   "design": [
+    28,
+    38
+   ],
+   "anchors": {
+    "solo": 30.0,
+    "mute": 34.6
+   },
+   "tag": "Mix",
+   "title": "Solo, mute and volume",
+   "sub": "Hear just the drums — or drop the vocals and sing the part yourself.",
+   "vo": [
+    "Want to hear just the drums?",
+    "{solo}Hit solo.",
+    "{pause:1.8}",
+    "{mute}Or mute the vocals,",
+    "and sing the part yourself."
+   ]
+  },
+  {
+   "id": "tuning",
+   "design": [
+    38,
+    46
+   ],
+   "anchors": {
+    "tempo": 39.0,
+    "pitch": 42.0
+   },
+   "tag": "Practice",
+   "title": "Tempo and pitch",
+   "sub": "Slow down without changing the key. Change the key without changing the tempo.",
+   "vo": [
+    "{tempo}Slow it down to seventy-five percent,",
+    "without changing the pitch.",
+    "{pitch}Or shift the key, to fit your voice."
+   ]
+  },
+  {
+   "id": "click",
+   "design": [
+    46,
+    54
+   ],
+   "anchors": {
+    "bpm": 47.0,
+    "click": 48.0
+   },
+   "tag": "New",
+   "title": "A click that follows the song",
+   "sub": "Tempo and downbeats are found in the drums — the click keeps up at any speed.",
+   "vo": [
+    "{bpm}StemSplitter finds the tempo in the drums.",
+    "{click}Turn on the click,",
+    "and it lands right on the beat, at any speed.",
+    "{pause:1.2}"
+   ]
+  },
+  {
+   "id": "export",
+   "design": [
+    54,
+    61
+   ],
+   "anchors": {
+    "export": 55.35,
+    "library": 58.55
+   },
+   "tag": "And more",
+   "title": "Save your mix, pick up where you left off",
+   "sub": "Export your own mix as WAV. Earlier songs open instantly.",
+   "vo": [
+    "Save your own mix{export} as an audio file,",
+    "and jump back into earlier songs,{library} in one click."
+   ]
+  },
+  {
+   "id": "outro",
+   "design": [
+    61,
+    68
+   ],
+   "vo": [
+    "StemSplitter for Mac.",
+    "Fully local.",
+    "Fully yours."
+   ]
+  }
+ ],
+ "kokoro_voice": "af_heart",
+ "speed": 1.0
+}

@@ -1,36 +1,26 @@
 import SwiftUI
 
-struct WaveformView: View {
+/// Vågform som spegelvända staplar (Canvas). Ritas bara om när topparna eller färgen ändras.
+struct WaveformView: View, Equatable {
     let peaks: [Float]
     let color: Color
-    let progress: Double
 
     var body: some View {
-        GeometryReader { geometry in
-            let width = geometry.size.width
-            let height = geometry.size.height
-            let count = max(1, peaks.count)
-            let barWidth = max(1.5, width / CGFloat(count) * 0.7)
-            let playheadX = width * CGFloat(min(max(progress, 0), 1))
-
-            ZStack(alignment: .leading) {
-                Path { path in
-                    for (index, peak) in peaks.enumerated() {
-                        let x = CGFloat(index) * (width / CGFloat(count))
-                        let barHeight = max(2, CGFloat(peak) * (height - 4))
-                        path.addRoundedRect(
-                            in: CGRect(x: x, y: (height - barHeight) / 2, width: barWidth, height: barHeight),
-                            cornerSize: CGSize(width: barWidth / 2, height: barWidth / 2)
-                        )
-                    }
-                }
-                .fill(color.opacity(0.75))
-
-                Rectangle()
-                    .fill(Color.white.opacity(0.9))
-                    .frame(width: 2)
-                    .offset(x: playheadX - 1)
+        Canvas { context, size in
+            guard !peaks.isEmpty, size.width > 0 else { return }
+            let step = size.width / CGFloat(peaks.count)
+            let barWidth = max(1, step * 0.55)
+            let middle = size.height / 2
+            var path = Path()
+            for (index, peak) in peaks.enumerated() {
+                let height = max(1, CGFloat(min(peak, 1)) * size.height)
+                path.addRect(CGRect(x: CGFloat(index) * step, y: middle - height / 2, width: barWidth, height: height))
             }
+            context.fill(path, with: .color(color))
         }
+    }
+
+    static func == (lhs: WaveformView, rhs: WaveformView) -> Bool {
+        lhs.color == rhs.color && lhs.peaks == rhs.peaks
     }
 }

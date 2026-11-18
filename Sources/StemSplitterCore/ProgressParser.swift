@@ -24,3 +24,49 @@ public enum ProgressParser {
         return nil
     }
 }
+
+/// Vad en rad från Demucs betyder för förloppet.
+public enum DemucsLine: Equatable, Sendable {
+    /// Nedladdning av modellvikter (första gången en modell används): "80.2M/80.2M [00:05, 15.2MB/s]".
+    case download(Double)
+    /// Separering: "45%|████ | 78.0/175.5 [00:10<00:12, 7.81seconds/s]".
+    case separation(Double)
+    case other
+}
+
+extension ProgressParser {
+    public static func classify(_ line: String) -> DemucsLine {
+        guard let fraction = fraction(fromLine: line) else { return .other }
+        if line.contains("seconds") { return .separation(fraction) }
+        if line.contains("B/s") || line.contains("Downloading") { return .download(fraction) }
+        return .separation(fraction)
+    }
+}
+
+/// Slår ihop flera omgångar som var och en går 0→100 % till ett enda förlopp.
+/// Demucs kör t.ex. fyra modeller efter varandra för htdemucs_ft, med ett eget förlopp per modell.
+/// En ny omgång känns igen på att procenten börjar om.
+public struct PassProgress: Sendable {
+    public private(set) var passIndex = 0
+    public private(set) var passes: Int
+    private var last: Double?
+
+    public init(expectedPasses: Int) {
+        passes = max(1, expectedPasses)
+    }
+
+    /// Omgång som pågår, räknat från 1.
+    public var passNumber: Int { passIndex + 1 }
+
+    /// Tar emot förloppet för aktuell omgång (0…1) och returnerar det samlade förloppet (0…1).
+    public mutating func update(_ fraction: Double) -> Double {
+        let value = min(max(fraction, 0), 1)
+        if let last, value < last - 0.2 {
+            passIndex += 1
+            // Fler omgångar än väntat: utöka hellre än att gå över 100 %
+            passes = max(passes, passIndex + 1)
+        }
+        last = value
+        return min(1, (Double(passIndex) + value) / Double(passes))
+    }
+}
