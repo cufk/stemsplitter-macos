@@ -1,8 +1,9 @@
-import XCTest
+import Foundation
+import Testing
 @testable import StemSplitterCore
 
-final class StemLocatorTests: XCTestCase {
-    func testLocatesStemsRecursively() throws {
+struct StemLocatorTests {
+    @Test func locatesStemsRecursively() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("stemlocator-\(UUID().uuidString)", isDirectory: true)
         let nested = root.appendingPathComponent("htdemucs/min-lat", isDirectory: true)
@@ -12,16 +13,16 @@ final class StemLocatorTests: XCTestCase {
         }
 
         let found = try StemLocator.locate(in: root)
-        XCTAssertEqual(found.count, 4)
-        XCTAssertEqual(found[.vocals]?.lastPathComponent, "vocals.wav")
-        XCTAssertEqual(found[.drums]?.lastPathComponent, "drums.wav")
-        XCTAssertEqual(found[.bass]?.lastPathComponent, "bass.wav")
-        XCTAssertEqual(found[.other]?.lastPathComponent, "other.wav")
+        #expect(found.count == 4)
+        #expect(found[.vocals]?.lastPathComponent == "vocals.wav")
+        #expect(found[.drums]?.lastPathComponent == "drums.wav")
+        #expect(found[.bass]?.lastPathComponent == "bass.wav")
+        #expect(found[.other]?.lastPathComponent == "other.wav")
     }
 
-    func testEmptyDirectoryReturnsEmpty() throws {
+    @Test func emptyDirectoryReturnsEmpty() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("stemlocator-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        XCTAssertTrue(try StemLocator.locate(in: root).isEmpty)
+        #expect(try StemLocator.locate(in: root).isEmpty)
     }
 }

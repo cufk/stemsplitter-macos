@@ -1,0 +1,9 @@
+frames/
+stills/
+vo_chunks/
+*.wav
+*.mp4
+AppIcon.png
+timeline_real.json
+__pycache__/
+kokoro/

@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift:
+    name: Swift build + test + app
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Swift build (debug)
+        run: |
+          set -o pipefail
+          swift build 2>&1 | tee build.log
+
+      - name: Swift test
+        run: swift test
+
+      - name: Bygg .app + .dmg (release)
+        run: ./scripts/build-app.sh
+
+      - name: Röktest av app-bunten
+        run: |
+          APP=build/StemSplitter.app
+          ARCHS=$(lipo -archs "$APP/Contents/MacOS/StemSplitter")
+          echo "Arkitekturer: $ARCHS"
+          echo "$ARCHS" | grep -q arm64
+          echo "$ARCHS" | grep -q x86_64
+          "$APP/Contents/MacOS/StemSplitter" --self-test
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then
+            echo "Självtest som Intel (Rosetta):"
+            arch -x86_64 "$APP/Contents/MacOS/StemSplitter" --self-test
+          else
+            echo "Rosetta saknas på runnern — Intel-delen testas inte här"
+          fi
+          DMG=$(ls build/StemSplitter-*.dmg)
+          hdiutil attach -nobrowse -mountpoint /tmp/ss-dmg "$DMG" >/dev/null
+          test -d "/tmp/ss-dmg/StemSplitter.app"
+          test -L "/tmp/ss-dmg/Program"
+          test -f "/tmp/ss-dmg/Läs mig först.txt"
+          hdiutil detach /tmp/ss-dmg >/dev/null
+          echo "dmg innehåller app, genväg till Program och instruktioner"
+          test -x "$APP/Contents/MacOS/StemSplitter"
+          test -f "$APP/Contents/Info.plist"
+          test -f "$APP/Contents/Resources/AppIcon.icns"
+          ls "$APP/Contents/Resources/"*.bundle >/dev/null
+          find "$APP/Contents/Resources" -name bootstrap.sh | grep -q .
+          plutil -lint "$APP/Contents/Info.plist"
+          codesign --verify --deep --strict "$APP"
+          echo "App-bunten ser komplett ut"
+
+      - name: Sammanfattning av kompilatorvarningar
+        if: always()
+        run: |
+          [ -f build.log ] || exit 0
+          W=$(grep -E ': warning: ' build.log | sort -u)
+          N=$(printf '%s' "$W" | grep -c . || true)
+          {
+            echo "### Kompilatorvarningar: $N"
+            if [ "$N" -gt 0 ]; then echo '```'; echo "$W" | head -50; echo '```'; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Utan varningar är W tom — se till att steget ändå lyckas
+          printf '%s\n' "$W" | head -50 | while IFS= read -r l; do
+            if [ -n "$l" ]; then echo "::warning::$l"; fi
+          done
+          exit 0
+
+      - name: Ladda upp StemSplitter.dmg
+        uses: actions/upload-artifact@v4
+        with:
+          name: StemSplitter-${{ github.sha }}
+          path: build/StemSplitter-*.dmg
+          retention-days: 14
+          if-no-files-found: error
+
+  dev-agent:
+    name: dev-agent (Python-tester)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Enhetstester
+        working-directory: dev-agent
+        run: python -m unittest discover -s tests -v

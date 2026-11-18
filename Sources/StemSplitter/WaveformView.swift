@@ -1,32 +1,26 @@
 import SwiftUI
 
-struct WaveformView: View {
+/// Vågform som spegelvända staplar (Canvas). Ritas bara om när topparna eller färgen ändras.
+struct WaveformView: View, Equatable {
     let peaks: [Float]
     let color: Color
-    let progress: Double
 
     var body: some View {
-        GeometryReader { geometry in
-            let width = geometry.size.width
-            let height = geometry.size.height
-            let count = max(1, peaks.count)
-            let barWidth = max(1, width / CGFloat(count))
-            Path { path in
-                for (index, peak) in peaks.enumerated() {
-                    let x = CGFloat(index) * barWidth
-                    let barHeight = max(1, CGFloat(peak) * height)
-                    path.addRect(CGRect(
-                        x: x,
-                        y: (height - barHeight) / 2,
-                        width: barWidth * 0.8,
-                        height: barHeight
-                    ))
-                }
+        Canvas { context, size in
+            guard !peaks.isEmpty, size.width > 0 else { return }
+            let step = size.width / CGFloat(peaks.count)
+            let barWidth = max(1, step * 0.55)
+            let middle = size.height / 2
+            var path = Path()
+            for (index, peak) in peaks.enumerated() {
+                let height = max(1, CGFloat(min(peak, 1)) * size.height)
+                path.addRect(CGRect(x: CGFloat(index) * step, y: middle - height / 2, width: barWidth, height: height))
             }
-            .fill(color.opacity(0.7))
-            Rectangle()
-                .fill(Color.white.opacity(0.25))
-                .frame(width: width * CGFloat(min(max(progress, 0), 1)))
+            context.fill(path, with: .color(color))
         }
+    }
+
+    static func == (lhs: WaveformView, rhs: WaveformView) -> Bool {
+        lhs.color == rhs.color && lhs.peaks == rhs.peaks
     }
 }
