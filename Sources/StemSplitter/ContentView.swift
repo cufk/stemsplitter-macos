@@ -18,8 +18,9 @@ struct ContentView: View {
         .background(Theme.background.ignoresSafeArea())
         .tint(Theme.accent)
         .dropDestination(for: URL.self) { urls, _ in
-            guard let url = urls.first(where: { AudioFileSupport.isSupported($0) }) ?? urls.first else { return false }
-            viewModel.open(url)
+            guard !urls.isEmpty else { return false }
+            // En låt öppnas direkt; flera låtar eller mappar läggs i kön
+            viewModel.open(urls)
             return true
         } isTargeted: { isTargeted = $0 }
         .alert("Python 3.9–3.12 saknas", isPresented: $viewModel.showPythonInstallPrompt) {
@@ -43,7 +44,7 @@ struct ContentView: View {
     private var content: some View {
         switch viewModel.phase {
         case .idle:
-            EmptyStateView(isTargeted: isTargeted, onOpen: viewModel.openFileDialog)
+            IdleView(viewModel: viewModel, batch: viewModel.batch, isTargeted: isTargeted)
         case .working:
             WorkingView(
                 title: viewModel.title,
@@ -128,5 +129,27 @@ private struct ExportStatus: View {
         }
         .animation(.spring(duration: 0.3), value: viewModel.isExporting)
         .animation(.spring(duration: 0.3), value: viewModel.exportedURL)
+    }
+}
+
+/// Startläget: tomt fönster att dra in låtar i, eller kön om den har låtar.
+private struct IdleView: View {
+    @ObservedObject var viewModel: AppViewModel
+    @ObservedObject var batch: BatchProcessor
+    let isTargeted: Bool
+
+    var body: some View {
+        if batch.hasItems {
+            QueuePanel(viewModel: viewModel, batch: batch)
+                .card(cornerRadius: 22)
+                .overlay {
+                    if isTargeted {
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .strokeBorder(Theme.accent, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+                    }
+                }
+        } else {
+            EmptyStateView(isTargeted: isTargeted, onOpen: viewModel.openFileDialog)
+        }
     }
 }

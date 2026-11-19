@@ -9,6 +9,7 @@ All bearbetning sker **100 % lokalt på din Mac**. Ingen ljudfil skickas någons
 ## Funktioner
 
 - Välj en lokal ljudfil (WAV, AIFF, CAF, MP3, M4A, AAC, FLAC) via dialog, ⌘O eller drag-and-drop
+- **Kö för flera låtar:** välj eller dra in flera låtar, eller en hel mapp, så separeras de efter varandra i bakgrunden medan du övar. Låtar som redan finns i biblioteket hoppas över; vågformer och tempo räknas fram direkt så att klara låtar öppnas utan väntan (⇧⌘K visar kön)
 - Stem-separering lokalt med [Demucs](https://github.com/facebookresearch/demucs) (`htdemucs`: sång / trummor / bas / övrigt), på GPU (MPS) när det går — kan avbrytas
 - **Tempoanalys**: BPM, varje slag och taktettor hittas i trumspåret; taktlinjal ovanför spåren
 - **Klick** i takt med låten (⌘K) — följer med när tempot ändras, ettan har ett ljusare klick. Halvera/dubbla tempot eller flytta ettan om analysen missar
@@ -113,6 +114,7 @@ Sources/
     OnsetDetector          energiflöde per 5 ms-ram (helt band + basband), strömmande
     BeatTracker            tempo (viktad autokorrelation), slag (dynamisk programmering), etta
     BeatGrid               slag, BPM och taktettor; halvera, dubbla, flytta ettan
+    BatchQueue             köns logik: status per låt, dubbletter, samlat förlopp; hitta ljudfiler i mappar
     ClickSynth             metronomklick
     CacheKey               innehållsbaserad cache-nyckel (FNV-1a över storlek + första/sista MB)
     PeakAccumulator        vågformstoppar i hinkar
@@ -138,6 +140,8 @@ Sources/
     PlaybackEngine         ljudgraf som byggs en gång: spelare + klick → stem-mixer → tonhöjd/tempo
     SeparationService      Python-miljö + Demucs, med avbrytning och städning
     ProcessRunner          kör processer, strömmar rader, avbryts med Task.cancel()
+    BatchProcessor         kön: separerar låtar efter varandra, en Demucs-körning åt gången (SeparationGate)
+    QueuePanel             köns panel: status per låt, avbryt, rensa, öppna
     ProjectStore           cachen: atomiska projekt, lista, ta bort, storlek
     Resources/bootstrap.sh skapar venv och installerar Demucs (Apple Silicon och Intel)
 Tests/

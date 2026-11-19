@@ -37,6 +37,9 @@ final class AppViewModel: ObservableObject {
 
     let playback = PlaybackEngine()
     private let separator = SeparationService()
+    /// Kö för att separera flera låtar i bakgrunden.
+    let batch: BatchProcessor
+    @Published var showQueuePanel = false
     private var loadTask: Task<Void, Never>?
     private var exportTask: Task<Void, Never>?
     /// Ökas för varje ny laddning; resultat från en äldre (avbruten) laddning ignoreras.
@@ -47,7 +50,17 @@ final class AppViewModel: ObservableObject {
     init() {
         SeparationService.removeStaleWorkDirectories()
         ProjectStore.removeStaleStaging()
+        batch = BatchProcessor(separator: separator)
         refreshLibrary()
+        batch.onProjectReady = { [weak self] key in
+            guard let self else { return }
+            self.refreshLibrary()
+            // Ingen låt öppen: öppna den första som blir klar
+            if self.phase == .idle && self.stems.isEmpty {
+                self.selectProject(key)
+            }
+        }
+        batch.onNeedsPython = { [weak self] in self?.showPythonInstallPrompt = true }
     }
 
     var isReady: Bool { phase == .ready }
@@ -56,17 +69,47 @@ final class AppViewModel: ObservableObject {
 
     func openFileDialog() {
         let panel = NSOpenPanel()
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.audio]
-        panel.message = "Välj en lokal ljudfil du har rätt att använda"
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.audio, .folder]
+        panel.message = "Välj en eller flera låtar (eller en mapp) som du har rätt att använda"
+        panel.prompt = "Öppna"
         panel.begin { [weak self] result in
-            guard result == .OK, let url = panel.url else { return }
-            Task { @MainActor in self?.open(url) }
+            guard result == .OK else { return }
+            let urls = panel.urls
+            Task { @MainActor in self?.open(urls) }
         }
     }
 
+    /// En fil öppnas direkt; flera filer eller mappar läggs i kön och separeras efter varandra.
+    func open(_ urls: [URL]) {
+        let files = AudioFileSupport.collectAudioFiles(from: urls)
+        if files.isEmpty {
+            if urls.count == 1, let url = urls.first {
+                open(url)   // visar felet för filformat som inte stöds
+            } else {
+                alertMessage = "Hittade inga ljudfiler som stöds (WAV, AIFF, CAF, MP3, M4A, AAC eller FLAC)."
+            }
+            return
+        }
+        if files.count == 1 && !batch.isActive {
+            open(files[0])
+            return
+        }
+        let added = batch.enqueue(files)
+        if added == 0 {
+            alertMessage = "Låtarna finns redan i kön."
+        }
+        showQueuePanel = true
+    }
+
     func open(_ url: URL) {
+        // Medan kön arbetar läggs nya låtar sist i den i stället för att avbryta
+        if batch.isActive && AudioFileSupport.isSupported(url) {
+            batch.enqueue([url])
+            showQueuePanel = true
+            return
+        }
         startLoad { id in await self.load(url, id: id) }
     }
 
@@ -164,7 +207,8 @@ final class AppViewModel: ObservableObject {
         do {
             let model = SeparationModel.from(defaultsValue: UserDefaults.standard.string(forKey: SeparationModel.defaultsKey))
             log("Modell: \(model.rawValue)")
-            let result = try await separator.separate(input: input, model: model.rawValue) { [weak self] event in
+            let separator = self.separator
+            let result = try await withSeparationGate { try await separator.separate(input: input, model: model.rawValue) { [weak self] event in
                 Task { @MainActor in
                     guard let self, self.isCurrent(id) else { return }
                     switch event {
@@ -182,7 +226,7 @@ final class AppViewModel: ObservableObject {
                         self.setStage(.separating, "GPU:n klarade inte låten — kör om på CPU (tar längre tid)…", progress: nil)
                     }
                 }
-            }
+            } }
             defer { try? FileManager.default.removeItem(at: result.workDirectory) }
             guard isCurrent(id) else { return }
             setStage(.saving, "Sparar stems…")
@@ -476,6 +520,13 @@ final class AppViewModel: ObservableObject {
     }
 
     // MARK: - Python
+
+    /// Öppnar en låt från kön (klar eller redan i biblioteket).
+    func openQueued(_ item: BatchItem) {
+        guard let key = item.state.projectKey else { return }
+        showQueuePanel = false
+        selectProject(key)
+    }
 
     func installPython() {
         showPythonInstallPrompt = false

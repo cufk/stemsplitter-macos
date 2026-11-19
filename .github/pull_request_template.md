@@ -16,3 +16,4 @@
 - [ ] Pitch och tempo påverkar var sitt
 - [ ] BPM visas och stämmer ungefär; klicket ligger på slagen och följer med när tempot ändras
 - [ ] Export av mix ger en spelbar WAV
+- [ ] Flera låtar/en mapp läggs i kön och separeras efter varandra; klara låtar kan öppnas medan kön arbetar

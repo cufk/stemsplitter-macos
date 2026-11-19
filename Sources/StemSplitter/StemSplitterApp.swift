@@ -67,8 +67,10 @@ struct StemSplitterApp: App {
         .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("Öppna ljudfil…") { viewModel.openFileDialog() }
+                Button("Öppna låtar…") { viewModel.openFileDialog() }
                     .keyboardShortcut("o")
+                Button("Visa kön") { viewModel.showQueuePanel = true }
+                    .keyboardShortcut("k", modifiers: [.command, .shift])
             }
             CommandGroup(after: .saveItem) {
                 Button("Exportera mix…") { viewModel.exportMix() }

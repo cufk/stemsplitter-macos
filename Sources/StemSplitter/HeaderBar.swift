@@ -19,9 +19,11 @@ struct HeaderBar: View {
                 LibraryPopover(viewModel: viewModel) { showLibrary = false }
             }
 
-            CircleIconButton(systemName: "plus", help: "Öppna ljudfil (⌘O)") {
+            CircleIconButton(systemName: "plus", help: "Öppna en eller flera låtar (⌘O)") {
                 viewModel.openFileDialog()
             }
+
+            QueueHeaderButton(viewModel: viewModel, batch: viewModel.batch)
 
             Spacer()
 
@@ -40,7 +42,7 @@ struct HeaderBar: View {
             Spacer()
 
             Menu {
-                Button("Öppna ljudfil…") { viewModel.openFileDialog() }
+                Button("Öppna låtar…") { viewModel.openFileDialog() }
                 Button("Exportera mix…") { viewModel.exportMix() }
                     .disabled(!viewModel.isReady || viewModel.isExporting)
                 Divider()
@@ -152,5 +154,27 @@ struct LibraryPopover: View {
             Text("Stems, vågformer och tempo tas bort från cachen. Originalfilen påverkas inte.")
         }
         .onAppear { viewModel.refreshLibrary() }
+    }
+}
+
+/// Visas när kön har låtar: ring med förloppet och en panel med kön.
+private struct QueueHeaderButton: View {
+    @ObservedObject var viewModel: AppViewModel
+    @ObservedObject var batch: BatchProcessor
+
+    var body: some View {
+        if batch.hasItems {
+            Button {
+                viewModel.showQueuePanel.toggle()
+            } label: {
+                QueueButtonLabel(batch: batch)
+            }
+            .buttonStyle(.plain)
+            .help("Kö")
+            .popover(isPresented: $viewModel.showQueuePanel, arrowEdge: .bottom) {
+                QueuePanel(viewModel: viewModel, batch: batch)
+            }
+            .transition(.scale.combined(with: .opacity))
+        }
     }
 }

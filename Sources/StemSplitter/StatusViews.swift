@@ -16,10 +16,10 @@ struct EmptyStateView: View {
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.defaultAction)
-            Text("Dra in en ljudfil")
+            Text("Dra in låtar")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(Theme.ink)
-            Text("Låten delas upp i sång, trummor, bas och övrigt — helt lokalt på din Mac. Tempot analyseras så att du kan öva med klick.")
+            Text("En låt eller flera — eller en hel mapp. Varje låt delas upp i sång, trummor, bas och övrigt, helt lokalt på din Mac. Flera låtar körs efter varandra i en kö.")
                 .font(.callout)
                 .foregroundStyle(Theme.secondaryInk)
                 .multilineTextAlignment(.center)
