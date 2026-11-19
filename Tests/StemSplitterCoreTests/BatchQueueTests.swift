@@ -9,8 +9,11 @@ struct BatchQueueTests {
 
     @Test func addsInOrderAndSkipsDuplicatesStillInQueue() {
         var queue = BatchQueue()
-        #expect(queue.add([a, b]) == 2)
-        #expect(queue.add([a, c]) == 1)   // a väntar redan
+        // #expect kan inte anropa mutating-metoder — spara resultatet först
+        let first = queue.add([a, b])
+        let second = queue.add([a, c])   // a väntar redan
+        #expect(first == 2)
+        #expect(second == 1)
         #expect(queue.items.map(\.name) == ["a", "b", "c"])
         #expect(queue.next?.url == a)
     }
@@ -19,7 +22,8 @@ struct BatchQueueTests {
         var queue = BatchQueue()
         queue.add([a])
         queue.update(queue.items[0].id, to: .done(key: "k"))
-        #expect(queue.add([a]) == 1)
+        let added = queue.add([a])
+        #expect(added == 1)
     }
 
     @Test func worksThroughTheQueue() {
@@ -53,7 +57,8 @@ struct BatchQueueTests {
         queue.add([a, b])
         let working = queue.items[0].id
         queue.update(working, to: .working(stage: .converting, progress: 0.2))
-        #expect(queue.cancel(working))              // var igång
+        let wasWorking = queue.cancel(working)
+        #expect(wasWorking)                         // var igång
         queue.update(working, to: .working(stage: .separating, progress: 0.3))   // sent besked
         #expect(queue.items[0].state == .cancelled)
         #expect(queue.counted.count == 1)
