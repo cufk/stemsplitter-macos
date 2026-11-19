@@ -8,12 +8,15 @@ import json, os, re, wave
 import numpy as np
 
 SR = 44100
-S = json.load(open("script_en.json"))
+import sys
+SCRIPT = sys.argv[1] if len(sys.argv) > 1 else "script_en.json"
+S = json.load(open(SCRIPT))
+CHUNKS = "vo_chunks/" + os.path.splitext(os.path.basename(SCRIPT))[0]
 T = json.load(open("timeline.json"))
 BEAT = 60 / 100.0
 
 def chunk_audio(scene, i):
-    p = f"vo_chunks/{scene}_{i}.wav"
+    p = f"{CHUNKS}/{scene}_{i}.wav"
     if not os.path.exists(p): return None
     with wave.open(p) as w:
         x = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2") / 32768.0
@@ -24,6 +27,7 @@ def chunk_audio(scene, i):
 def clean(text): return re.sub(r"\{[\w:.]+\}", "", text).strip()
 
 real_t = 0.0
+scene_pts = []     # (design-start, design-slut, brytpunkter) per scen
 warp = []          # [verklig tid, designtid]
 captions = []      # {t0, t1, words:[[ord, tid]]}
 scenes_out = []
@@ -69,36 +73,56 @@ for sc in S["scenes"]:
     for name, dt in sorted((sc.get("anchors") or {}).items(), key=lambda kv: kv[1]):
         if name in marks: pts.append((marks[name] + 0.12, dt))   # klicket strax efter ordets början
     pts.append((r1, d1))
+    scene_pts.append((d0, d1, [(round(a, 3), b) for a, b in pts]))
     for a, b in pts:
         a = round(a, 3)
         if warp and a <= warp[-1][0]:
-            if b <= warp[-1][1]: continue          # samma punkt
-            a = round(warp[-1][0] + 0.02, 3)       # håll tiderna strikt stigande
+            if b == warp[-1][1]: continue          # samma punkt
+            # nästa scen kan ligga var som helst i animationens tid: klipp direkt dit
+            a = round(warp[-1][0] + 0.02, 3)
         warp.append([a, b])
-    captions.append({"scene": sc["id"], "t0": round(r0, 3), "t1": round(r1, 3), "words": words})
+    # Undertexten visas en mening i taget (som i förlagan): dela orden vid meningsslut
+    groups, current = [], []
+    for w in words:
+        current.append(w)
+        if w[0].rstrip("\"'”").endswith((".", "?", "!")):
+            groups.append(current); current = []
+    if current: groups.append(current)
+    for gi, group in enumerate(groups):
+        c0 = r0 if gi == 0 else round(group[0][1] - 0.15, 3)
+        c1 = r1 if gi == len(groups) - 1 else round(groups[gi + 1][0][1] - 0.15, 3)
+        captions.append({"scene": sc["id"], "t0": round(c0, 3), "t1": round(c1, 3), "words": group})
     out = {k: sc[k] for k in ("id", "tag", "title", "sub") if k in sc}
     out.update(t0=d0, t1=d1, caption=" ".join(clean(p) for p in sc["vo"] if not p.startswith("{pause")), real=[round(r0, 3), round(r1, 3)], marks={k: round(v, 3) for k, v in marks.items()})
     scenes_out.append(out)
     real_t = r1
 
 total = round(real_t + 0.4, 3)
-warp.append([total, 68.0])
+warp.append([total, scenes_out[-1]["t1"]])
 
 def design_to_real(d):
-    xs = [w[1] for w in warp]; ys = [w[0] for w in warp]
-    return float(np.interp(d, xs, ys))
+    """Verklig tid för en tidpunkt i animationen, inom den scen som innehåller den (None om ingen gör det)."""
+    for d0, d1, pts in scene_pts:
+        if d0 <= d < d1:
+            return float(np.interp(d, [p[1] for p in pts], [p[0] for p in pts]))
+    return None
 
 # metronomklick: från klicket i klickscenen till scenens slut, i 100 BPM
-click_scene = next(s for s in scenes_out if s["id"] == "click")
-start = click_scene["marks"].get("click", click_scene["real"][0]) + 0.35
 metronome = []
-k = 0
-while start + k * BEAT < click_scene["real"][1] - 0.2:
-    metronome.append([round(start + k * BEAT, 3), k % 4 == 0]); k += 1
+click_scene = next((s for s in scenes_out if s["id"] == "click"), None)
+if click_scene:
+    start = click_scene["marks"].get("click", click_scene["real"][0]) + 0.35
+    k = 0
+    while start + k * BEAT < click_scene["real"][1] - 0.2:
+        metronome.append([round(start + k * BEAT, 3), k % 4 == 0]); k += 1
 
-ui_clicks = [round(design_to_real(d), 3) for d in [9.9, 30.0, 33.5, 34.6, 37.4, 38.4, 39.0, 41.7, 42.0, 42.45, 48.0, 54.7, 55.35, 58.55]]
+# Muspekarens klick (animationens tid) — bara de som hör till scener i manuset
+UI_CLICKS = [9.9, 30.0, 33.5, 34.6, 37.4, 38.4, 39.0, 41.7, 42.0, 42.45, 48.0, 54.7, 55.35, 58.55,
+             102.0, 103.0, 109.6]
+ui_clicks = [round(r, 3) for r in (design_to_real(d) for d in UI_CLICKS) if r is not None]
 
-T.update(duration=total, fps=30, scenes=scenes_out, warp=warp, captions=captions, metronome=metronome, uiClicks=ui_clicks)
+T.update(duration=total, fps=30, scenes=scenes_out, warp=warp, captions=captions, metronome=metronome, uiClicks=ui_clicks,
+         introPill=S.get("introPill", "Now on macOS"), version=S.get("version"))
 json.dump(T, open("timeline_real.json", "w"), ensure_ascii=False, indent=1)
 
 # ---- ljud: röst + diskreta UI-klick + metronom

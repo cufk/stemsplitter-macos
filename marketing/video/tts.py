@@ -4,7 +4,7 @@ Standard: Kokoro, en öppen talmodell (Apache 2.0) som körs lokalt — ingen ny
 Modellfilerna hämtas automatiskt till ./kokoro första gången (~350 MB).
 Alternativ: Google Cloud Text-to-Speech om GOOGLE_TTS_API_KEY finns (--engine google).
 
-Användning: python3 tts.py [--engine kokoro|google] [--voice af_heart] [--speed 1.0]
+Användning: python3 tts.py [manus.json] [--engine kokoro|google] [--voice af_heart] [--speed 1.0]
 """
 import argparse, base64, json, os, re, sys, urllib.request, urllib.error, wave
 import numpy as np
@@ -12,8 +12,10 @@ import numpy as np
 ap = argparse.ArgumentParser()
 ap.add_argument("--engine", choices=["kokoro", "google"])
 ap.add_argument("--voice"); ap.add_argument("--speed", type=float)
+ap.add_argument("script", nargs="?", default="script_en.json")
 args = ap.parse_args()
-S = json.load(open("script_en.json"))
+S = json.load(open(args.script))
+CHUNKS = "vo_chunks/" + os.path.splitext(os.path.basename(args.script))[0]
 engine = args.engine or ("google" if os.environ.get("GOOGLE_TTS_API_KEY") else "kokoro")
 speed = args.speed or S.get("speed", 1.0)
 
@@ -53,12 +55,12 @@ else:
         except urllib.error.HTTPError as e:
             sys.exit(f"Google Text-to-Speech svarade {e.code}: {e.read().decode()[:400]}")
 
-os.makedirs("vo_chunks", exist_ok=True)
-for f in os.listdir("vo_chunks"): os.remove(os.path.join("vo_chunks", f))
+os.makedirs(CHUNKS, exist_ok=True)
+for f in os.listdir(CHUNKS): os.remove(os.path.join(CHUNKS, f))
 for sc in S["scenes"]:
     for i, part in enumerate(sc["vo"]):
         text = re.sub(r"\{[\w:.]+\}", "", part).strip()
         if not text: continue
-        synth(text, f"vo_chunks/{sc['id']}_{i}.wav")
+        synth(text, f"{CHUNKS}/{sc['id']}_{i}.wav")
         print(f"  {sc['id']}_{i}: {text}")
 print(f"klart: {engine}, röst {voice}")

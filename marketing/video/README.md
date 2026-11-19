@@ -8,11 +8,18 @@ Voice-over: Kokoro (öppen talmodell, Apache 2.0) som körs lokalt — ingen nyc
 Röst `af_heart`, ändras med `kokoro_voice` i `script_en.json`. Finns `GOOGLE_TTS_API_KEY` används
 Google Cloud Text-to-Speech i stället (`voice`).
 
+## Videor
+
+- `script_en.json` — huvudvideon som presenterar hela appen (~63 s).
+- `whats_new_<version>.json` — kort video om nyheterna i en version, t.ex. `whats_new_1.3.json` (kön).
+  En ny sådan görs för varje version med nya funktioner (se `CLAUDE.md`).
+
 ## Bygga
 
 ```sh
 pip install kokoro-onnx numpy        # en gång; modellfilerna (~350 MB) hämtas automatiskt
-./marketing/video/render.sh           # → marketing/video/StemSplitter-presentation.mp4
+./marketing/video/render.sh                       # → StemSplitter-presentation.mp4
+./marketing/video/render.sh whats_new_1.3.json    # → StemSplitter-whats_new_1.3.mp4
 ```
 
 `./render.sh --new-voice` hämtar rösten på nytt (t.ex. efter ändrat manus eller röst).

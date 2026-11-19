@@ -24,6 +24,20 @@ Se README.md för funktioner och arkitektur. Skriv commit-meddelanden, kommentar
 5. **Påstå aldrig att något fungerar förrän CI är grön för exakt den commit det gäller.**
    Det som CI inte kan testa (UI, ljud, Demucs-körning) listas som manuella steg i PR:en.
 
+## Ny version = ny "What's new"-video
+Varje gång en ny version av appen får nya funktioner ska en kort video som presenterar dem tas fram
+(önskemål från ägaren). Gör så här:
+1. Höj versionen i `Packaging/Info.plist` (`CFBundleShortVersionString`, `CFBundleVersion`).
+2. Skapa `marketing/video/whats_new_<version>.json` (se `whats_new_1.3.json`): en introscen,
+   en scen per ny funktion och avslutningen. Manus på engelska; `{markering}` kopplar ord till klick,
+   `{pause:1.0}` ger bilden tid.
+3. Lägg till en scen för varje ny funktion i `marketing/video/video.html` — i appens design, i ett eget
+   intervall i animationens tid (köscenen ligger på 100–112; nästa funktion t.ex. 120–135) med kamera,
+   muspekare och klick (lägg även klicktiderna i `UI_CLICKS` i `build.py`).
+4. Rendera: `./marketing/video/render.sh whats_new_<version>.json` och titta på stillbilder
+   (`node render.js stills 5,10,15`) innan hela videon renderas.
+5. Skicka videon till ägaren som nedladdningsbar fil. Lägg inte videofiler i repot.
+
 ## CI (`.github/workflows/ci.yml`, körs vid push till alla brancher)
 - `swift` (macos-latest): `swift build` → `swift test` → `scripts/build-app.sh` → röktest av app-bunten
   (binär, Info.plist, ikon, resursbunt med bootstrap.sh, signatur) → kompilatorvarningar i sammanfattningen

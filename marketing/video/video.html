@@ -80,7 +80,7 @@ canvas#lanes{display:block;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.
   <div id="win">
     <div class="lights"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i></div>
     <div class="hdr">
-      <div style="display:flex;gap:12px"><div class="circ" id="btnHistory"></div><div class="circ" id="btnPlus"></div></div>
+      <div style="display:flex;gap:12px"><div class="circ" id="btnHistory"></div><div class="circ" id="btnPlus"></div><div class="circ" id="btnQueue" style="display:none;position:relative"></div></div>
       <div class="mid"><div class="t1" id="hTitle">StemSplitter</div><div class="t2" id="hSub">Lokal stem-separering</div></div>
       <div class="circ" id="btnMore"></div>
     </div>
@@ -199,13 +199,14 @@ function drawLanes(s, t){
   const box=$('lanesBox'), cv=$('lanes'); const W=box.clientWidth, H=box.clientHeight-26;
   if (cv.width!==W*2){ cv.width=W*2; cv.height=H*2; cv.style.width=W+'px'; cv.style.height=H+'px'; }
   const g=cv.getContext('2d'); g.setTransform(2,0,0,2,0,0); g.clearRect(0,0,W,H);
-  const lh=H/4, frac=clamp(songTime(t)/SONG_LEN);
+  const lh=H/4, frac=songFraction(t);
+  const shift = t>=109.6 && t<112 ? 150 : 0;   // en annan låt öppnad ur kön
   const reveal = clamp((t-19.6)/1.6);   // spåren ritas fram från vänster
   const anySolo = Object.values(s.solo).some(Boolean);
   STEMS.forEach((st,i)=>{
     const y=i*lh, silenced = s.mute[st.id] || (anySolo && !s.solo[st.id]);
     g.fillStyle = s.solo[st.id] ? hexA(st.color,.16) : hexA(st.color,.05); g.fillRect(0,y,W,lh);
-    const p=PEAKS[st.id], n=p.length, step=W/n, bw=Math.max(1,step*.55), col = silenced? '#9A9A9A' : st.color;
+    const p0=PEAKS[st.id], p=shift ? p0.slice(shift).concat(p0.slice(0,shift)) : p0, n=p.length, step=W/n, bw=Math.max(1,step*.55), col = silenced? '#9A9A9A' : st.color;
     for (let k=0;k<n;k++){
       const x=k*step; if (x/W>reveal) break;
       const h=Math.max(1,p[k]*(lh-22)*(st.id==='bass'? s.bassVol/1.0 : 1));
@@ -225,6 +226,11 @@ function drawLanes(s, t){
   $('ruler').innerHTML=html;
   const ph=$('ph'); ph.style.left=(W*frac-1)+'px'; ph.style.height=(H+26)+'px'; ph.style.opacity = t>=19.6? 1:0;
   return {W,H};
+}
+/// Spelhuvudets position: från ljudets tidslinje, men i köscenen en egen (och omstart när en ny låt öppnas)
+function songFraction(t){
+  if (t>=100 && t<112) return t<109.6 ? clamp(.35+(t-100)/SONG_LEN) : clamp((t-109.6)/SONG_LEN);
+  return clamp(songTime(t)/SONG_LEN);
 }
 function hexA(hex,a){ const n=parseInt(hex.slice(1),16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; }
 function beatPulse(){ const t=window.__real||0; let p=0; for (const [vt,acc] of (TL.metronome||[])){ const d=t-vt; if (d>=0 && d<0.25) p=Math.max(p,(1-d/0.25)*(acc?1:.6)); } return p; }
@@ -266,7 +272,7 @@ function renderApp(t, s){
     // spårens rubriker tonas in med spåren
     $('heads').style.opacity = clamp((t-19.6)/.8);
     drawLanes(s,t);
-    $('ttime').innerHTML = `${fmt(songTime(t))} <span>/ ${fmt(SONG_LEN)}</span>`;
+    $('ttime').innerHTML = `${fmt(songFraction(t)*SONG_LEN)} <span>/ ${fmt(SONG_LEN)}</span>`;
     $('bPlay').innerHTML = s.playing ? ICON.pause : ICON.play;
     const m=$('bMetro'); m.style.background = s.click? '#ED5429':'#F4F4F5'; m.innerHTML = ICON.metro(s.click?'#fff':'#141414');
     if (s.click){ const p=beatPulse(); m.style.boxShadow=`0 0 0 ${p*8}px rgba(237,84,41,${.25*p})`; } else m.style.boxShadow='none';
@@ -321,11 +327,12 @@ const CAM = [   // fönstret är 1780×700, ytan 1600×630
   [46.4, -1, 0, .9],[48.3, -1, 0, .9],
   [49.1, 0, 0, 1.0],[53.4, 0, 0, 1.0],                   // sidhuvud med BPM och spår med slagpuls
   [54.2, -1, 0, .9],[61, -1, 0, .9],
+  [100, -1, 0, .9],[102.4, -1, 0, .9],[103.3, 0, 0, 1.35],[109.3, 0, 0, 1.35],[110.2, -1, 0, .9],[112, -1, 0, .9],   // zoom på kön
 ];
 function camera(t){
   const v = kf(t, CAM.map(([tt,x,y,s])=>[tt,[x,y,s]]));
   const w=$('win'); w.style.transform=`translate(${v[0]}px,${v[1]}px) scale(${v[2]})`;
-  $('view').style.opacity = t<5 || t>61.2 ? 0 : 1;
+  $('view').style.opacity = t<5 || (t>61.2 && t<100) ? 0 : 1;
 }
 
 // ------------------------------------------------------------------ muspekare: [t, mål] där mål är element-id eller [x,y]
@@ -336,11 +343,15 @@ const CUR = [
   [38.1,'cTempo'],[38.8,'pre-75'],[40.9,'pre-75'],[41.5,'cPitch'],[41.9,'pitchPlus'],[42.4,'pitchPlus'],[44.4,[1250,1100]],
   [46.2,[1500,1150]],[47.6,'bMetro'],[48.6,'bMetro'],[49.3,[1650,1200]],
   [54.2,[1700,500]],[54.6,'btnMore'],[55.2,'miExport'],[55.6,'miExport'],[57.0,[1500,900]],[58.4,'btnHistory'],[59.6,'btnHistory'],[60.1,'libRow'],[60.8,[600,1200]],
+  // Köscenen (100–112): mapp dras in → kön öppnas → första klara låten öppnas
+  [100.2,[1750,1250]],[101.0,'folderStart'],[102.0,'lanesCenter'],[102.3,'lanesCenter'],[102.9,'btnQueue'],[103.3,'btnQueue'],[108.7,'qOpen0'],[109.6,'qOpen0'],[110.5,[1350,1250]],
 ];
-const CLICKS_UI=[9.9, 30.0, 33.5, 34.6, 37.4, 38.4, 39.0, 41.7, 42.0, 42.45, 48.0, 54.7, 55.35, 58.55];
+const CLICKS_UI=[9.9, 30.0, 33.5, 34.6, 37.4, 38.4, 39.0, 41.7, 42.0, 42.45, 48.0, 54.7, 55.35, 58.55, 102.0, 103.0, 109.6];
 function targetPos(id, t){
   if (Array.isArray(id)) return id;
   if (id==='fileStart') return [1660,700];
+  if (id==='folderStart') return [1640,640];
+  if (id==='lanesCenter'){ const b=$('lanesBox'); if(!b) return [960,600]; const r=b.getBoundingClientRect(); return [r.left+r.width*.5, r.top+r.height*.5]; }
   if (id==='laneTarget'){ const b=$('lanesBox'); if(!b) return [960,600]; const r=b.getBoundingClientRect(); return [r.left+r.width*.62, r.top+r.height*.45]; }
   if (id==='libRow'){ const e=document.querySelectorAll('#libpop .libitem')[1]; if(!e) return [400,400]; const r=e.getBoundingClientRect(); return [r.left+90,r.top+r.height/2]; }
   let frac=null; if (id.includes('@')){ [id,frac]=id.split('@'); frac=parseFloat(frac)/1.5; }
@@ -350,7 +361,7 @@ function targetPos(id, t){
 function cursor(t){
   const c=$('cursor');
   let i=CUR.findIndex(k=>k[0]>t);
-  if (t<CUR[0][0] || t>=61 || i===0){ c.style.opacity=0; return null; }
+  if (t<CUR[0][0] || (t>=61 && t<100) || t>=112 || i===0){ c.style.opacity=0; $('fx').innerHTML=''; return null; }
   if (i<0) i=CUR.length;
   const a=CUR[i-1], b=CUR[Math.min(i,CUR.length-1)];
   const pa=targetPos(a[1],t), pb=targetPos(b[1],t); if(!pa||!pb){ c.style.opacity=0; return null; }
@@ -379,7 +390,8 @@ function caption(){
   const cap=(TL.captions||[]).find(c=>t>=c.t0 && t<c.t1);
   if (!cap || !cap.words.length){ el.style.opacity=0; return; }
   el.innerHTML = cap.words.map(([w,wt])=> wt<=t ? `<b>${w}</b>` : w).join(' ');
-  const a=clamp((t-cap.t0)/.25), o=1-clamp((t-(cap.t1-.2))/.2);
+  const caps=TL.captions, idx=caps.indexOf(cap), sameScenePrev=idx>0&&caps[idx-1].scene===cap.scene, sameSceneNext=idx<caps.length-1&&caps[idx+1].scene===cap.scene;
+  const a=sameScenePrev?1:clamp((t-cap.t0)/.25), o=sameSceneNext?1:1-clamp((t-(cap.t1-.2))/.2);
   el.style.opacity=Math.min(a,o);
   el.style.bottom = cap.scene==='outro' ? '470px' : '46px';
 }
@@ -400,11 +412,11 @@ function intro(t){
   el.innerHTML = cards + `<div style="position:absolute;left:0;right:0;top:${300+(1-a)*30}px;text-align:center;opacity:${a}">
     <img src="AppIcon.png" style="width:190px;height:190px;transform:scale(${.85+.15*a})">
     <div class="wordmark" style="font-size:150px;line-height:1;margin-top:6px">StemSplitter</div>
-    <div style="display:inline-block;margin-top:26px;background:#141414;color:#fff;font-size:22px;font-weight:600;padding:10px 22px;border-radius:999px">Now on macOS</div></div>`;
+    <div style="display:inline-block;margin-top:26px;background:#141414;color:#fff;font-size:22px;font-weight:600;padding:10px 22px;border-radius:999px">${(TL.introPill||'Now on macOS')}</div></div>`;
 }
 function outro(t){
   const el=$('outro');
-  if (t<61){ el.style.opacity=0; el.innerHTML=''; return; }
+  if (t<61 || t>=70){ el.style.opacity=0; el.innerHTML=''; return; }
   const r=easeOut((t-61)/1.0)*2600, a=easeOut((t-61.8)/.8);
   el.style.opacity=1;
   el.innerHTML = `<div style="position:absolute;left:${960-r}px;top:${1080-r}px;width:${2*r}px;height:${2*r}px;border-radius:50%;background:#ED5429"></div>
@@ -430,6 +442,69 @@ function realToDesign(r){
   for (let i=1;i<w.length;i++){ if (r<=w[i][0]){ const [r0,d0]=w[i-1],[r1,d1]=w[i]; return d0+(d1-d0)*clamp((r-r0)/(r1-r0)); } }
   return w.at(-1)[1];
 }
+// ------------------------------------------------------------------ kön (scen 100–112)
+const QUEUE_SONGS = ['Evening Jam', 'Bass practice – verse', 'Acoustic demo'];
+function queueState(t){
+  if (t<100 || t>=112) return null;
+  const items = QUEUE_SONGS.map(()=>({state:'waiting', p:0}));
+  const p1=clamp((t-103.2)/3.2), p2=clamp((t-106.5)/4.5);
+  if (t>=103.2) items[0] = p1<1 ? {state:'working', p:p1} : {state:'done', p:1};
+  if (t>=106.5) items[1] = p2<1 ? {state:'working', p:p2} : {state:'done', p:1};
+  const done = items.filter(i=>i.state==='done').length;
+  const current = items.find(i=>i.state==='working');
+  const overall = (done + (current ? .1+.85*current.p : 0)) / items.length;
+  return { visible: t>=102.1, appear: easeOut((t-102.1)/.35), popover: t>=103.0 && t<109.7, popA: easeOut((t-103.0)/.2),
+           items, done, overall, opened: t>=109.6 };
+}
+function queueRing(q){
+  const r=15, c=2*Math.PI*r, rem=q.items.length-q.done;
+  return `<svg viewBox="0 0 38 38" width="44" height="44" style="position:absolute;inset:0;margin:auto"><circle cx="19" cy="19" r="${r}" fill="none" stroke="#ED5429" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="${c*q.overall} ${c}" transform="rotate(-90 19 19)"/></svg>
+    <span style="font-weight:700;font-size:15px;font-variant-numeric:tabular-nums">${rem}</span>`;
+}
+function queuePopover(q, t){
+  const row=(name,it,i)=>{
+    const icon = it.state==='done' ? ICON.check
+      : it.state==='working' ? `<div style="width:15px;height:15px;border-radius:50%;border:2.5px solid #E1E1E3;border-top-color:#141414;transform:rotate(${t*400}deg)"></div>`
+      : '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#737373" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+    const status = it.state==='done' ? 'Done' : it.state==='working' ? `Splitting into stems ${Math.floor(it.p*100)} %` : 'Waiting';
+    const bar = it.state==='working' ? `<div class="bar" style="width:100%;height:3px;margin-top:6px"><i style="width:${(.1+.85*it.p)*100}%"></i></div>` : '';
+    const trail = it.state==='done'
+      ? `<span id="qOpen${i}" style="background:#141414;color:#fff;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px">Open</span>`
+      : '<span style="width:24px;height:24px;border-radius:50%;background:#F4F4F5;display:flex;align-items:center;justify-content:center;color:#737373;font-size:11px;font-weight:700">✕</span>';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:11px 16px;${i<2?'border-bottom:1px solid #EFEFF1':''}">
+      <div style="width:22px;display:flex;justify-content:center">${icon}</div>
+      <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:500">${name}</div><div style="font-size:12px;color:#737373;margin-top:2px;font-variant-numeric:tabular-nums">${status}</div>${bar}</div>${trail}</div>`;
+  };
+  return `<div style="padding:16px 16px 12px"><div style="display:flex;justify-content:space-between"><b style="font-size:16px">Queue</b><span style="font-size:13px;color:#737373">${q.done} of ${q.items.length} done</span></div>
+     <div class="bar" style="width:100%;height:5px;margin-top:10px"><i style="width:${q.overall*100}%"></i></div></div>
+     <div style="border-top:1px solid #E1E1E3">${q.items.map((it,i)=>row(QUEUE_SONGS[i],it,i)).join('')}</div>
+     <div style="display:flex;justify-content:space-between;padding:12px 16px;border-top:1px solid #E1E1E3;font-size:13px;color:#ED5429"><span>Add songs…</span><span>Cancel all</span></div>`;
+}
+function renderQueue(t){
+  const q=queueState(t), btn=$('btnQueue');
+  let pop=document.getElementById('qpop');
+  if (!q || !q.visible){ btn.style.display='none'; if (pop) pop.remove(); return q; }
+  btn.style.display='flex'; btn.style.transform=`scale(${q.appear})`; btn.innerHTML=queueRing(q);
+  if (q.popover){
+    if (!pop){ pop=document.createElement('div'); pop.id='qpop'; pop.className='pop'; pop.style.padding='0'; pop.style.width='380px'; $('win').appendChild(pop); }
+    pop.innerHTML=queuePopover(q,t); pop.style.left='96px'; pop.style.top='98px';
+    pop.style.opacity=q.popA; pop.style.transform=`translateY(${(1-q.popA)*8}px)`;
+  } else if (pop) pop.remove();
+  if (q.opened) $('hTitle').textContent = QUEUE_SONGS[0];
+  return q;
+}
+function folderDrag(t, cur){
+  let el=document.getElementById('folder');
+  if (t>=101.0 && t<102.15 && cur){
+    if(!el){ el=document.createElement('div'); el.id='folder'; el.className='file';
+      el.innerHTML=`<div class="fi" style="background:linear-gradient(#7FB2F0,#4A8FE0)"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div><div>Rehearsal set<div style="font-size:12px;font-weight:500;color:#737373">3 songs</div></div>`;
+      $('stage').insertBefore(el,$('cursor')); }
+    const shrink = t>101.8 ? 1-clamp((t-101.8)/.3)*.6 : 1;
+    el.style.left=(cur[0]-30)+'px'; el.style.top=(cur[1]-20)+'px'; el.style.transform=`scale(${shrink}) rotate(-3deg)`;
+    el.style.opacity = t>102.0 ? 1-clamp((t-102.0)/.15) : 1;
+  } else if (el) el.remove();
+}
+
 window.render = function(tReal){
   window.__real=tReal;
   const t=realToDesign(tReal);
@@ -437,6 +512,7 @@ window.render = function(tReal){
   camera(t);
   renderApp(t,s);
   head(t); caption(); intro(t); outro(t);
-  const cur=cursor(t); fileDrag(t,cur);
+  renderQueue(t);
+  const cur=cursor(t); fileDrag(t,cur); folderDrag(t,cur);
 };
 </script></body></html>

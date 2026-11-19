@@ -1,0 +1,15 @@
+{
+ "version": "1.3",
+ "introPill": "What's new in 1.3",
+ "kokoro_voice": "af_heart", "speed": 1.0,
+ "lead": 0.45, "tail": 0.75, "gap_comma": 0.16, "gap_sentence": 0.32,
+ "scenes": [
+  {"id": "intro", "design": [0, 5.5],
+   "vo": ["Here's what's new in StemSplitter one point three."]},
+  {"id": "queue", "design": [100, 112], "anchors": {"drop": 102.0, "panel": 103.0, "open": 109.6},
+   "tag": "New", "title": "Split a whole set at once", "sub": "Drop in several songs or a folder. They're split one after another while you keep practicing.",
+   "vo": ["Drop in a whole folder,{drop} or pick several songs at once,", "and StemSplitter lines them up in a queue.", "{panel}You can follow every song as it's split.", "{pause:0.6}", "Finished songs open{open} right away,", "while the rest keep going in the background."]},
+  {"id": "outro", "design": [61, 68],
+   "vo": ["StemSplitter one point three.", "Fully local.", "Fully yours."]}
+ ]
+}
